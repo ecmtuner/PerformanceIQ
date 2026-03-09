@@ -66,7 +66,7 @@ export default function EthanolCalculatorScreen() {
   );
 
   return (
-    <ScrollView style={styles.container} keyboardShouldPersistTaps="handled">
+    <ScrollView style={styles.container} keyboardShouldPersistTaps="always" keyboardDismissMode="none">
       <Text style={styles.title}>Ethanol</Text>
       <Text style={styles.subtitle}>Mix Calculator</Text>
 

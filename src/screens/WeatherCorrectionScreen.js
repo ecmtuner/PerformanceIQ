@@ -60,7 +60,7 @@ export default function WeatherCorrectionScreen() {
   );
 
   return (
-    <ScrollView style={styles.container} keyboardShouldPersistTaps="handled">
+    <ScrollView style={styles.container} keyboardShouldPersistTaps="always" keyboardDismissMode="none">
       <Text style={styles.title}>SAE Weather</Text>
       <Text style={styles.subtitle}>Correction Factor</Text>
 

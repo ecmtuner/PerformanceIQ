@@ -30,7 +30,7 @@ export default function TrapSpeedScreen() {
   const reset = () => { setMeasuredSpeed(''); setSlope(''); setResult(null); };
 
   return (
-    <ScrollView style={styles.container} keyboardShouldPersistTaps="handled">
+    <ScrollView style={styles.container} keyboardShouldPersistTaps="always" keyboardDismissMode="none">
       <Text style={styles.title}>Trap Speed</Text>
       <Text style={styles.subtitle}>Corrector (1/4 Mile)</Text>
 

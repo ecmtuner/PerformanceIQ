@@ -11,7 +11,6 @@ import StandingStartScreen from './src/screens/StandingStartScreen';
 import TrapSpeedScreen from './src/screens/TrapSpeedScreen';
 import DensityAltitudeScreen from './src/screens/DensityAltitudeScreen';
 import WeatherCorrectionScreen from './src/screens/WeatherCorrectionScreen';
-import HPEstimatorScreen from './src/screens/HPEstimatorScreen';
 import EthanolCalculatorScreen from './src/screens/EthanolCalculatorScreen';
 import E85FinderScreen from './src/screens/E85FinderScreen';
 
@@ -34,7 +33,6 @@ function ToolsStack() {
       <Stack.Screen name="TrapSpeed" component={TrapSpeedScreen} options={{ title: 'Trap Speed Corrector' }} />
       <Stack.Screen name="DensityAltitude" component={DensityAltitudeScreen} options={{ title: 'Density Altitude' }} />
       <Stack.Screen name="WeatherCorrection" component={WeatherCorrectionScreen} options={{ title: 'SAE Weather Correction' }} />
-      <Stack.Screen name="HPEstimator" component={HPEstimatorScreen} options={{ title: 'HP Estimator' }} />
       <Stack.Screen name="EthanolCalc" component={EthanolCalculatorScreen} options={{ title: 'Ethanol Mix Calculator' }} />
       <Stack.Screen name="FindE85" component={E85FinderScreen} options={{ title: 'Find E85' }} />
     </Stack.Navigator>
@@ -55,7 +53,7 @@ export default function App() {
         }}
       >
         <Tab.Screen name="Tools" component={ToolsStack}
-          options={{ tabBarIcon: ({ focused }) => <Text style={{ fontSize: 20, opacity: focused ? 1 : 0.4 }}>🏎️</Text>, tabBarLabel: 'Tools' }} />
+          options={{ tabBarIcon: ({ focused }) => <Text style={{ fontSize: 20, opacity: focused ? 1 : 0.4 }}>🏎️</Text> }} />
         <Tab.Screen name="E85 Calc" component={EthanolCalculatorScreen}
           options={{ tabBarIcon: ({ focused }) => <Text style={{ fontSize: 20, opacity: focused ? 1 : 0.4 }}>⛽</Text>,
             headerShown: true, headerStyle: { backgroundColor: '#0a0a0a' }, headerTitleStyle: { color: '#fff' } }} />

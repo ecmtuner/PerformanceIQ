@@ -7,7 +7,6 @@ const TOOLS = [
   { id: 'trap',     emoji: '🏁', title: 'Trap Speed',        sub: 'Corrector',           screen: 'TrapSpeed' },
   { id: 'da',       emoji: '🌡️', title: 'Density Altitude',  sub: 'Calculator',          screen: 'DensityAltitude' },
   { id: 'weather',  emoji: '🌤️', title: 'SAE Weather',       sub: 'Correction',          screen: 'WeatherCorrection' },
-  { id: 'hp',       emoji: '💪', title: 'HP Estimator',      sub: 'From ET / Trap Speed', screen: 'HPEstimator' },
   { id: 'ethanol',  emoji: '⛽', title: 'Ethanol Mix',       sub: 'Calculator',          screen: 'EthanolCalc' },
   { id: 'e85',      emoji: '📍', title: 'Find E85',          sub: 'Station Finder',      screen: 'FindE85' },
 ];

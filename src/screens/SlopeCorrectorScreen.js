@@ -28,7 +28,7 @@ export default function SlopeCorrectorScreen() {
   const reset = () => { setMeasuredTime(''); setSlope(''); setResult(null); };
 
   return (
-    <ScrollView style={styles.container} keyboardShouldPersistTaps="handled">
+    <ScrollView style={styles.container} keyboardShouldPersistTaps="always" keyboardDismissMode="none">
       <Text style={styles.title}>Roll Race</Text>
       <Text style={styles.subtitle}>Slope Corrector</Text>
 

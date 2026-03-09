@@ -24,7 +24,7 @@ export default function StandingStartScreen() {
   const reset = () => { setMeasuredTime(''); setSlope(''); setResult(null); };
 
   return (
-    <ScrollView style={styles.container} keyboardShouldPersistTaps="handled">
+    <ScrollView style={styles.container} keyboardShouldPersistTaps="always" keyboardDismissMode="none">
       <Text style={styles.title}>0-60 / 0-100</Text>
       <Text style={styles.subtitle}>Slope Corrector</Text>
 
