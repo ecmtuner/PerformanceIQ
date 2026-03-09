@@ -8,6 +8,20 @@ import * as Location from 'expo-location';
 const NREL_API_KEY = 'dsgGHptNCc5VrdA136IpuG25QAaYFIxcoo8NRst5';
 const NREL_URL = 'https://developer.nrel.gov/api/alt-fuel-stations/v1.json';
 
+// US state neighbors map - fetch current + adjacent states for best coverage
+const STATE_NEIGHBORS = {
+  NJ: ['NJ','NY','PA','DE','CT'],
+  NY: ['NY','NJ','PA','CT','MA','VT'],
+  PA: ['PA','NJ','NY','DE','MD','WV','OH'],
+  CA: ['CA','NV','AZ','OR'],
+  TX: ['TX','OK','NM','AR','LA'],
+  FL: ['FL','GA','AL'],
+  IL: ['IL','WI','IN','MO','IA'],
+  OH: ['OH','PA','WV','KY','IN','MI'],
+  MI: ['MI','OH','IN','WI'],
+  GA: ['GA','FL','AL','TN','SC','NC'],
+};
+
 function haversineDistance(lat1, lon1, lat2, lon2) {
   const R = 3958.8;
   const dLat = ((lat2 - lat1) * Math.PI) / 180;
@@ -20,11 +34,31 @@ function haversineDistance(lat1, lon1, lat2, lon2) {
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
+async function fetchStationsForStates(states) {
+  const results = [];
+  for (const state of states) {
+    const params = new URLSearchParams({
+      api_key: NREL_API_KEY,
+      fuel_type: 'E85',
+      state,
+      limit: '100',
+      status: 'E',
+    });
+    try {
+      const res = await fetch(`${NREL_URL}?${params}`);
+      const data = await res.json();
+      if (data.fuel_stations) results.push(...data.fuel_stations);
+    } catch (e) {}
+  }
+  // Deduplicate by station id
+  const seen = new Set();
+  return results.filter(s => { if (seen.has(s.id)) return false; seen.add(s.id); return true; });
+}
+
 export default function E85FinderScreen() {
   const [stations, setStations] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
-  const [userLocation, setUserLocation] = useState(null);
   const [debugInfo, setDebugInfo] = useState(null);
 
   const findStations = async () => {
@@ -41,61 +75,35 @@ export default function E85FinderScreen() {
         return;
       }
 
-      // Use HIGH accuracy GPS
-      const loc = await Location.getCurrentPositionAsync({
-        accuracy: Location.Accuracy.High,
-        timeInterval: 1000,
-        distanceInterval: 0,
-      });
+      const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+      const { latitude, longitude } = loc.coords;
 
-      const { latitude, longitude, accuracy } = loc.coords;
-      setUserLocation({ latitude, longitude });
-      setDebugInfo(`GPS: ${latitude.toFixed(4)}, ${longitude.toFixed(4)} (±${Math.round(accuracy)}m)`);
+      // Reverse geocode to get state
+      const geo = await Location.reverseGeocodeAsync({ latitude, longitude });
+      const state = geo[0]?.region ? getStateCode(geo[0].region) : null;
+      setDebugInfo(`📍 ${geo[0]?.city || ''}, ${state || 'Unknown state'}`);
 
-      const params = new URLSearchParams({
-        api_key: NREL_API_KEY,
-        fuel_type: 'E85',
-        latitude: latitude.toFixed(6),
-        longitude: longitude.toFixed(6),
-        radius: '50.0',
-        limit: '50',
-        status: 'E',
-        access: 'public',
-      });
+      // Fetch stations from current state + neighbors
+      const statesToFetch = state && STATE_NEIGHBORS[state]
+        ? STATE_NEIGHBORS[state]
+        : state ? [state] : ['NJ']; // fallback
 
-      const url = `${NREL_URL}?${params}`;
-      const res = await fetch(url);
-      const data = await res.json();
+      const allStations = await fetchStationsForStates(statesToFetch);
 
-      if (!data.fuel_stations || data.fuel_stations.length === 0) {
-        // Try without status filter as fallback
-        const params2 = new URLSearchParams({
-          api_key: NREL_API_KEY,
-          fuel_type: 'E85',
-          latitude: latitude.toFixed(6),
-          longitude: longitude.toFixed(6),
-          radius: '100.0',
-          limit: '50',
-        });
-        const res2 = await fetch(`${NREL_URL}?${params2}`);
-        const data2 = await res2.json();
-
-        if (!data2.fuel_stations || data2.fuel_stations.length === 0) {
-          setError('No E85 stations found within 100 miles of your location.');
-          setLoading(false);
-          return;
-        }
-
-        const withDist = data2.fuel_stations
-          .map((s) => ({ ...s, distance: haversineDistance(latitude, longitude, s.latitude, s.longitude) }))
-          .sort((a, b) => a.distance - b.distance);
-        setStations(withDist);
-      } else {
-        const withDist = data.fuel_stations
-          .map((s) => ({ ...s, distance: haversineDistance(latitude, longitude, s.latitude, s.longitude) }))
-          .sort((a, b) => a.distance - b.distance);
-        setStations(withDist);
+      if (allStations.length === 0) {
+        setError('No E85 stations found in your area.');
+        setLoading(false);
+        return;
       }
+
+      // Sort by distance
+      const withDist = allStations
+        .filter(s => s.latitude && s.longitude)
+        .map(s => ({ ...s, distance: haversineDistance(latitude, longitude, s.latitude, s.longitude) }))
+        .sort((a, b) => a.distance - b.distance)
+        .slice(0, 30);
+
+      setStations(withDist);
     } catch (e) {
       setError(`Error: ${e.message}`);
     }
@@ -124,9 +132,7 @@ export default function E85FinderScreen() {
       <Text style={styles.address} numberOfLines={2}>
         {station.street_address}, {station.city}, {station.state} {station.zip}
       </Text>
-      {station.e85_blender_pump && (
-        <Text style={styles.badge}>⚡ Blender Pump</Text>
-      )}
+      {station.e85_blender_pump && <Text style={styles.badge}>⚡ Blender Pump</Text>}
       <Text style={styles.tapHint}>Tap to open in Maps →</Text>
     </TouchableOpacity>
   );
@@ -138,14 +144,11 @@ export default function E85FinderScreen() {
 
       <TouchableOpacity style={styles.findBtn} onPress={findStations} disabled={loading}>
         {loading
-          ? <ActivityIndicator color="#fff" />
-          : <Text style={styles.findBtnText}>📍  FIND NEAR ME</Text>
-        }
+          ? <><ActivityIndicator color="#fff" /><Text style={styles.findBtnText}>  Searching...</Text></>
+          : <Text style={styles.findBtnText}>📍  FIND NEAR ME</Text>}
       </TouchableOpacity>
 
-      {debugInfo && (
-        <Text style={styles.debugText}>{debugInfo}</Text>
-      )}
+      {debugInfo && <Text style={styles.debugText}>{debugInfo}</Text>}
 
       {error && (
         <View style={styles.errorBox}>
@@ -154,7 +157,9 @@ export default function E85FinderScreen() {
       )}
 
       {stations.length > 0 && (
-        <Text style={styles.resultsLabel}>{stations.length} E85 stations found nearby</Text>
+        <Text style={styles.resultsLabel}>
+          {stations.length} E85 stations nearby · closest {stations[0]?.distance.toFixed(1)} mi
+        </Text>
       )}
 
       <FlatList
@@ -168,13 +173,32 @@ export default function E85FinderScreen() {
   );
 }
 
+// Convert full state name to 2-letter code
+function getStateCode(stateName) {
+  const map = {
+    'New Jersey':'NJ','New York':'NY','Pennsylvania':'PA','Connecticut':'CT',
+    'Delaware':'DE','Maryland':'MD','California':'CA','Texas':'TX','Florida':'FL',
+    'Illinois':'IL','Ohio':'OH','Michigan':'MI','Georgia':'GA','Virginia':'VA',
+    'North Carolina':'NC','Massachusetts':'MA','Colorado':'CO','Minnesota':'MN',
+    'Wisconsin':'WI','Indiana':'IN','Missouri':'MO','Tennessee':'TN','Arizona':'AZ',
+    'Washington':'WA','Oregon':'OR','Nevada':'NV','Iowa':'IA','Kansas':'KS',
+    'Nebraska':'NE','South Dakota':'SD','North Dakota':'ND','Oklahoma':'OK',
+    'Arkansas':'AR','Louisiana':'LA','Mississippi':'MS','Alabama':'AL',
+    'South Carolina':'SC','Kentucky':'KY','West Virginia':'WV','Maine':'ME',
+    'New Hampshire':'NH','Vermont':'VT','Rhode Island':'RI','Montana':'MT',
+    'Idaho':'ID','Wyoming':'WY','Utah':'UT','New Mexico':'NM','Hawaii':'HI',
+    'Alaska':'AK',
+  };
+  return map[stateName] || stateName;
+}
+
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#0a0a0a', padding: 16 },
   title: { color: '#e51515', fontSize: 28, fontWeight: '800', marginTop: 12 },
   subtitle: { color: '#ffffff', fontSize: 18, fontWeight: '600', marginBottom: 20 },
-  findBtn: { backgroundColor: '#e51515', borderRadius: 10, padding: 16, alignItems: 'center', marginBottom: 10, minHeight: 52, justifyContent: 'center' },
+  findBtn: { backgroundColor: '#e51515', borderRadius: 10, padding: 16, alignItems: 'center', marginBottom: 10, minHeight: 52, justifyContent: 'center', flexDirection: 'row' },
   findBtnText: { color: '#fff', fontWeight: '800', fontSize: 16, letterSpacing: 1 },
-  debugText: { color: '#444', fontSize: 11, textAlign: 'center', marginBottom: 8 },
+  debugText: { color: '#555', fontSize: 12, textAlign: 'center', marginBottom: 8 },
   errorBox: { backgroundColor: '#1a0a00', borderWidth: 1, borderColor: '#aa4400', borderRadius: 10, padding: 14, marginBottom: 14 },
   errorText: { color: '#ff6633', fontSize: 14 },
   resultsLabel: { color: '#666', fontSize: 13, marginBottom: 10, textAlign: 'center' },
