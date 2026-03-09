@@ -45,6 +45,7 @@ export default function DragyGPSScreen() {
   const [bracket, setBracket] = useState(BRACKETS[2]);
   const [gpsStatus, setGpsStatus] = useState('—');
   const [rawLog, setRawLog] = useState(['Not connected yet.']);
+  const [completedRun, setCompletedRun] = useState(null);
   const deviceRef = useRef(null);
   const calcRef = useRef(new RunCalculator());
   const bufferRef = useRef('');
@@ -196,7 +197,19 @@ export default function DragyGPSScreen() {
   };
 
   const startRun = () => { calcRef.current.reset(); setTimes({}); setPeakSpeed(0); setState(STATES.RECORDING); };
-  const stopRun = () => setState(STATES.CONNECTED);
+  const stopRun = () => {
+    // Capture BEFORE state change — ref stays valid here
+    const snap = {
+      samples: [...calcRef.current.samples],
+      altSamples: [...(calcRef.current.altSamples || [])],
+      satellites: 12,
+    };
+    if (snap.samples.length > 2) {
+      setLastRun(snap.samples, snap.altSamples, snap.satellites);
+      setCompletedRun(snap);
+    }
+    setState(STATES.CONNECTED);
+  };
   const disconnect = () => {
     reconnectRef.current = false; lastDeviceRef.current = null;
     clearInterval(updateRef.current); deviceRef.current?.cancelConnection(); deviceRef.current = null;
@@ -265,11 +278,8 @@ export default function DragyGPSScreen() {
           {state !== STATES.RECORDING
             ? <TouchableOpacity style={styles.recordBtn} onPress={startRun}><Text style={styles.recordBtnText}>⏺ START RUN</Text></TouchableOpacity>
             : <TouchableOpacity style={[styles.recordBtn, styles.stopBtn]} onPress={stopRun}><Text style={styles.recordBtnText}>⏹ STOP RUN</Text></TouchableOpacity>}
-          {state === STATES.CONNECTED && calcRef.current.samples.length > 10 && (
-            <TouchableOpacity style={styles.resultsBtn} onPress={() => {
-              setLastRun(calcRef.current.samples, calcRef.current.altSamples || [], 12);
-              navigation?.navigate('DragyResults', {});
-            }}>
+          {completedRun && completedRun.samples.length > 2 && (
+            <TouchableOpacity style={styles.resultsBtn} onPress={() => navigation?.navigate('DragyResults', {})}>
               <Text style={styles.resultsBtnText}>📊 View Results</Text>
             </TouchableOpacity>
           )}

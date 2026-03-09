@@ -3,6 +3,25 @@ import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Share, Dimensions
 import { getLastRun } from '../services/RunStore';
 
 const SPLITS = [10, 20, 30, 40, 50, 60];
+
+class ErrorBoundary extends React.Component {
+  constructor(props) { super(props); this.state = { error: null }; }
+  static getDerivedStateFromError(e) { return { error: e }; }
+  render() {
+    if (this.state.error) {
+      return (
+        <View style={{ flex:1, backgroundColor:'#0a0a0a', justifyContent:'center', alignItems:'center', padding:20 }}>
+          <Text style={{ color:'#e51515', fontSize:18, fontWeight:'800', marginBottom:12 }}>⚠️ Results Error</Text>
+          <Text style={{ color:'#aaa', fontSize:12, textAlign:'center' }}>{this.state.error?.toString()}</Text>
+          <TouchableOpacity onPress={() => this.props.onBack?.()} style={{ marginTop:24 }}>
+            <Text style={{ color:'#e51515', fontSize:16 }}>← Go Back</Text>
+          </TouchableOpacity>
+        </View>
+      );
+    }
+    return this.props.children;
+  }
+}
 const SCREEN_W = Dimensions.get('window').width;
 
 const slopeCorrectTime = (rawTime, slopePct) => {
@@ -53,7 +72,7 @@ function AccelChart({ data, height = 70 }) {
   );
 }
 
-export default function DragyResultsScreen({ navigation }) {
+function DragyResultsInner({ navigation }) {
   const run = getLastRun();
   if (!run || !run.samples || run.samples.length < 2) {
     return (
@@ -233,3 +252,7 @@ const styles = StyleSheet.create({
   c2: { flex:1.5, color:'#fff', fontSize:13, fontWeight:'700', textAlign:'right' },
   c3: { flex:2, fontSize:13, fontWeight:'700', textAlign:'right' },
 });
+
+export default function DragyResultsScreen(props) {
+  return <ErrorBoundary onBack={() => props.navigation?.goBack()}><DragyResultsInner {...props} /></ErrorBoundary>;
+}
