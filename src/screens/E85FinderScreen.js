@@ -5,7 +5,7 @@ import {
 } from 'react-native';
 import * as Location from 'expo-location';
 
-const NREL_API_KEY = 'DEMO_KEY';
+const NREL_API_KEY = 'dsgGHptNCc5VrdA136IpuG25QAaYFIxcoo8NRst5';
 const NREL_URL = 'https://developer.nrel.gov/api/alt-fuel-stations/v1.json';
 
 function haversineDistance(lat1, lon1, lat2, lon2) {
