@@ -23,22 +23,25 @@
     },
     "android": {
       "package": "com.ecmtuner.performanceiq",
+      "compileSdkVersion": 34,
+      "targetSdkVersion": 34,
       "permissions": [
-        "ACCESS_FINE_LOCATION",
-        "ACCESS_COARSE_LOCATION",
-        "BLUETOOTH",
-        "BLUETOOTH_ADMIN",
-        "BLUETOOTH_CONNECT",
-        "BLUETOOTH_SCAN",
-        "android.permission.ACCESS_COARSE_LOCATION",
         "android.permission.ACCESS_FINE_LOCATION",
+        "android.permission.ACCESS_COARSE_LOCATION",
         "android.permission.BLUETOOTH",
         "android.permission.BLUETOOTH_ADMIN",
-        "android.permission.BLUETOOTH_CONNECT"
+        "android.permission.BLUETOOTH_CONNECT",
+        "android.permission.BLUETOOTH_SCAN",
+        "android.permission.BLUETOOTH_ADVERTISE"
       ]
     },
     "web": {
       "favicon": "./assets/favicon.png"
+    },
+    "extra": {
+      "eas": {
+        "projectId": "3243e2fd-c1d4-46e5-bfb6-f8aeb9b3bec2"
+      }
     },
     "plugins": [
       "expo-location",
@@ -47,19 +50,10 @@
         "react-native-ble-plx",
         {
           "isBackgroundEnabled": true,
-          "modes": [
-            "peripheral",
-            "central"
-          ],
+          "modes": ["peripheral", "central"],
           "bluetoothAlwaysPermission": "Allow PerformanceIQ to connect to OBD2 and Dragy GPS devices."
         }
       ]
-    ],
-    "extra": {
-      "eas": {
-        "projectId": "3243e2fd-c1d4-46e5-bfb6-f8aeb9b3bec2"
-      }
-    },
-    "owner": "ecmtuner"
+    ]
   }
 }
