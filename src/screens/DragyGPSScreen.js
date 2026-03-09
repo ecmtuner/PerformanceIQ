@@ -93,37 +93,33 @@ export default function DragyGPSScreen() {
 
       addRaw(`Total chars: ${allChars.length}`);
 
-      // 1. Subscribe to ALL notifiable/indicatable characteristics
+      // 1. Subscribe to data characteristics explicitly by UUID
       let monitored = 0;
-      for (const c of allChars) {
-        const shortId = c.uuid.replace(/-.*/, '').replace('0000', '');
-        if (c.isNotifiable || c.isIndicatable) {
-          monitored++;
-          const isData = DRAGY_DATA_CHARS.some(id => c.uuid.includes(id));
-          addRaw(`📡 Monitoring: ${shortId}${isData ? ' ← data' : ''}`);
-          c.monitor((err, char) => {
-            if (err || !char?.value) return;
-            try {
-              const raw = decodeB64(char.value);
-              // Always buffer ALL data — Dragy uses @ not $
-              bufferRef.current += raw;
-              const { sentences, remaining } = splitNMEABuffer(bufferRef.current);
-              bufferRef.current = remaining;
-              sentences.forEach(line => {
-                if (!line.startsWith('@')) {
-                  addRaw(line.substring(0, 55));
-                } else {
-                  // Throttle @ sentence logging to 1/sec to avoid overwhelming React
-                  logThrottleRef.current++;
-                  if (logThrottleRef.current % 10 === 0) {
-                    addRaw(line.substring(0, 55));
-                  }
-                }
-                processLine(line);
-              });
-            } catch (e) { addRaw(`Err: ${e.message}`); }
-          });
-        }
+      const DATA_UUIDS = ['0000fd02', '0000fd04', '00001014'];
+      for (const uuid of DATA_UUIDS) {
+        const c = allChars.find(x => x.uuid.toLowerCase().includes(uuid));
+        if (!c) { addRaw(`⚠️ ${uuid} not found`); continue; }
+        if (!c.isNotifiable && !c.isIndicatable) { addRaw(`⚠️ ${uuid} not notifiable`); continue; }
+        monitored++;
+        addRaw(`📡 Subscribing: ${uuid.replace('0000','')}...`);
+        c.monitor((err, char) => {
+          if (err) { addRaw(`❌ BLE err [${uuid.replace('0000','')}]: ${err.message}`); return; }
+          if (!char?.value) return;
+          try {
+            const raw = decodeB64(char.value);
+            bufferRef.current += raw;
+            const { sentences, remaining } = splitNMEABuffer(bufferRef.current);
+            bufferRef.current = remaining;
+            sentences.forEach(line => {
+              processLine(line);
+              if (logThrottleRef.current % 10 === 0) {
+                addRaw(line.substring(0, 60));
+              }
+              logThrottleRef.current++;
+            });
+          } catch (e) { addRaw(`❌ Parse err: ${e.message}`); }
+        });
+        addRaw(`✅ Subscribed: ${uuid.replace('0000','')}`);
       }
 
       // 2. Send start commands to all writable characteristics
