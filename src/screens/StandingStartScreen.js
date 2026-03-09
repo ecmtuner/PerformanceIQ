@@ -8,18 +8,21 @@ const BRACKETS = [
   { label: '0 – 60 MPH', value: '0_60', factor: 0.08 },
   { label: '0 – 100 MPH', value: '0_100', factor: 0.10 },
 ];
-const TIME_KEY = 'ss_time'; const SLOPE_KEY = 'ss_slope';
+const TIME_KEY = 'ss_time';
+const SLOPE_KEY = 'ss_slope';
 
 export default function StandingStartScreen() {
   const [bracket, setBracket] = useState(BRACKETS[0]);
   const [measuredTime, setMeasuredTime] = useState('');
   const [slope, setSlope] = useState('');
   const [result, setResult] = useState(null);
-  const timeRef = useRef(); const slopeRef = useRef();
+  const timeRef = useRef();
+  const slopeRef = useRef();
 
   const calculate = async () => {
     Keyboard.dismiss();
-    const time = parseFloat(measuredTime), grade = parseFloat(slope);
+    const time = parseFloat(measuredTime);
+    const grade = parseFloat(slope);
     if (isNaN(time) || isNaN(grade)) return;
     const delta = grade * bracket.factor;
     const car = await getCarProfile();
@@ -27,14 +30,27 @@ export default function StandingStartScreen() {
   };
 
   const handleSave = async () => {
-    await saveRun({ type: '0-60/0-100', bracket: bracket.label, rawTime: measuredTime, correctedTime: result.corrected, slope: parseFloat(slope), delta: result.delta, car: result.car ? `${result.car.year} ${result.car.make} ${result.car.model}`.trim() : null });
+    const car = await getCarProfile();
+    const carName = car ? [car.year, car.make, car.model].filter(Boolean).join(' ') : null;
+    await saveRun({
+      type: '0-60/0-100', bracket: bracket.label,
+      rawTime: measuredTime, correctedTime: result.corrected,
+      slope: parseFloat(slope), delta: result.delta, car: carName,
+    });
     Alert.alert('Saved! ✅', 'Run saved to your logbook.');
   };
 
   const handleShare = async () => {
-    const carProfile = await getCarProfile();
-    const carName = carProfile ? [carProfile.year, carProfile.make, carProfile.model].filter(Boolean).join(' ') : null;
-    shareRun({ type: '0-60/0-100', bracket: bracket.label, measuredTime, correctedTime: result.corrected, slope: parseFloat(slope), delta: result.delta, car: carName });
+    const car = await getCarProfile();
+    const carName = car ? [car.year, car.make, car.model].filter(Boolean).join(' ') : null;
+    shareRun({
+      type: '0-60/0-100', bracket: bracket.label,
+      measuredTime, correctedTime: result.corrected,
+      slope: parseFloat(slope), delta: result.delta, car: carName,
+    });
+  };
+
+  const reset = () => { setMeasuredTime(''); setSlope(''); setResult(null); };
 
   return (
     <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
@@ -46,29 +62,46 @@ export default function StandingStartScreen() {
         <View style={styles.card}>
           <Text style={styles.label}>Speed Bracket</Text>
           {BRACKETS.map((b) => (
-            <TouchableOpacity key={b.value} style={[styles.bracketBtn, bracket.value === b.value && styles.bracketBtnActive]} onPress={() => { setBracket(b); setResult(null); }}>
+            <TouchableOpacity key={b.value} style={[styles.bracketBtn, bracket.value === b.value && styles.bracketBtnActive]}
+              onPress={() => { setBracket(b); setResult(null); }}>
               <Text style={[styles.bracketBtnText, bracket.value === b.value && styles.bracketBtnTextActive]}>{b.label}</Text>
             </TouchableOpacity>
           ))}
         </View>
         <View style={styles.card}>
           <Text style={styles.label}>Measured Time (seconds)</Text>
-          <TextInput ref={timeRef} style={styles.input} value={measuredTime} onChangeText={setMeasuredTime} keyboardType="decimal-pad" placeholder="e.g. 3.850" placeholderTextColor="#555" inputAccessoryViewID={TIME_KEY} returnKeyType="next" blurOnSubmit={false} onSubmitEditing={() => slopeRef.current?.focus()} />
+          <TextInput ref={timeRef} style={styles.input} value={measuredTime} onChangeText={setMeasuredTime}
+            keyboardType="decimal-pad" placeholder="e.g. 3.850" placeholderTextColor="#555"
+            inputAccessoryViewID={TIME_KEY} returnKeyType="next" blurOnSubmit={false}
+            onSubmitEditing={() => slopeRef.current?.focus()} />
           <Text style={[styles.label, { marginTop: 16 }]}>Road Slope %</Text>
           <Text style={styles.hint}>Positive = uphill  ·  Negative = downhill</Text>
-          <TextInput ref={slopeRef} style={styles.input} value={slope} onChangeText={setSlope} keyboardType="numbers-and-punctuation" placeholder="e.g. -1.5  or  +2.0" placeholderTextColor="#555" inputAccessoryViewID={SLOPE_KEY} returnKeyType="done" blurOnSubmit={true} onSubmitEditing={Keyboard.dismiss} />
+          <TextInput ref={slopeRef} style={styles.input} value={slope} onChangeText={setSlope}
+            keyboardType="numbers-and-punctuation" placeholder="e.g. -1.5  or  +2.0" placeholderTextColor="#555"
+            inputAccessoryViewID={SLOPE_KEY} returnKeyType="done" blurOnSubmit={true}
+            onSubmitEditing={Keyboard.dismiss} />
         </View>
-        <TouchableOpacity style={styles.calcBtn} onPress={calculate}><Text style={styles.calcBtnText}>CALCULATE</Text></TouchableOpacity>
+        <TouchableOpacity style={styles.calcBtn} onPress={calculate}>
+          <Text style={styles.calcBtnText}>CALCULATE</Text>
+        </TouchableOpacity>
         {result && (
           <View style={styles.resultCard}>
             <Text style={styles.resultLabel}>Corrected Time</Text>
             <Text style={styles.resultValue}>{result.corrected}s</Text>
             <View style={styles.divider} />
-            <Text style={styles.deltaLabel}>{result.uphill ? `⬆️ Uphill cost you +${result.delta}s` : `⬇️ Downhill gave you -${result.delta}s`}</Text>
+            <Text style={styles.deltaLabel}>
+              {result.uphill ? `⬆️ Uphill cost you +${result.delta}s` : `⬇️ Downhill gave you -${result.delta}s`}
+            </Text>
             <View style={styles.actionRow}>
-              <TouchableOpacity style={styles.saveBtn} onPress={handleSave}><Text style={styles.saveBtnText}>💾 Save</Text></TouchableOpacity>
-              <TouchableOpacity style={styles.shareBtn} onPress={handleShare}><Text style={styles.shareBtnText}>📤 Share</Text></TouchableOpacity>
-              <TouchableOpacity style={styles.resetBtn} onPress={() => { setMeasuredTime(''); setSlope(''); setResult(null); }}><Text style={styles.resetBtnText}>Reset</Text></TouchableOpacity>
+              <TouchableOpacity style={styles.saveBtn} onPress={handleSave}>
+                <Text style={styles.saveBtnText}>💾 Save</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.shareBtn} onPress={handleShare}>
+                <Text style={styles.shareBtnText}>📤 Share</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.resetBtn} onPress={reset}>
+                <Text style={styles.resetBtnText}>Reset</Text>
+              </TouchableOpacity>
             </View>
           </View>
         )}
