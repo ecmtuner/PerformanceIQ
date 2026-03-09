@@ -26,7 +26,7 @@ const START_COMMANDS = [
   b64([0xA5, 0x01]),
   b64([0x00]),
   b64([0x0D, 0x0A]), // \r\n
-  Buffer.from('start\r\n').toString('base64'),
+  btoa('start\r\n'),
 ];
 
 const decodeB64 = (b64str) => {

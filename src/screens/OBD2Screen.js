@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, ScrollView, FlatList, Alert, Platform } from 'react-native';
 import { bleManager, requestBLEPermissions, OBD2_SERVICES, OBD2_CHARACTERISTICS } from '../services/BLEManager';
 import { PIDS, parseOBD2Response, AT_COMMANDS } from '../services/OBD2Service';
+import { atob, btoa } from 'react-native-quick-base64';
 
 const LIVE_PIDS = [PIDS.RPM, PIDS.SPEED, PIDS.THROTTLE, PIDS.COOLANT_TEMP, PIDS.INTAKE_TEMP, PIDS.MAP, PIDS.SHORT_FUEL, PIDS.LONG_FUEL, PIDS.TIMING_ADV, PIDS.BATTERY];
 
