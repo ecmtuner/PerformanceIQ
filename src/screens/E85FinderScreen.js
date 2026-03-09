@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet,
-  FlatList, ActivityIndicator, Linking, Alert, Platform,
+  FlatList, ActivityIndicator, Linking, Platform,
 } from 'react-native';
 import * as Location from 'expo-location';
 
@@ -9,7 +9,7 @@ const NREL_API_KEY = 'DEMO_KEY';
 const NREL_URL = 'https://developer.nrel.gov/api/alt-fuel-stations/v1.json';
 
 function haversineDistance(lat1, lon1, lat2, lon2) {
-  const R = 3958.8; // miles
+  const R = 3958.8;
   const dLat = ((lat2 - lat1) * Math.PI) / 180;
   const dLon = ((lon2 - lon1) * Math.PI) / 180;
   const a =
@@ -25,11 +25,13 @@ export default function E85FinderScreen() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [userLocation, setUserLocation] = useState(null);
+  const [debugInfo, setDebugInfo] = useState(null);
 
   const findStations = async () => {
     setLoading(true);
     setError(null);
     setStations([]);
+    setDebugInfo(null);
 
     try {
       const { status } = await Location.requestForegroundPermissionsAsync();
@@ -39,38 +41,63 @@ export default function E85FinderScreen() {
         return;
       }
 
-      const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
-      const { latitude, longitude } = loc.coords;
+      // Use HIGH accuracy GPS
+      const loc = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.High,
+        timeInterval: 1000,
+        distanceInterval: 0,
+      });
+
+      const { latitude, longitude, accuracy } = loc.coords;
       setUserLocation({ latitude, longitude });
+      setDebugInfo(`GPS: ${latitude.toFixed(4)}, ${longitude.toFixed(4)} (±${Math.round(accuracy)}m)`);
 
       const params = new URLSearchParams({
         api_key: NREL_API_KEY,
         fuel_type: 'E85',
         latitude: latitude.toFixed(6),
         longitude: longitude.toFixed(6),
-        radius: '25.0',
-        limit: '20',
+        radius: '50.0',
+        limit: '50',
         status: 'E',
+        access: 'public',
       });
 
-      const res = await fetch(`${NREL_URL}?${params}`);
+      const url = `${NREL_URL}?${params}`;
+      const res = await fetch(url);
       const data = await res.json();
 
-      if (!data.fuel_stations) {
-        setError('No stations found or API error.');
-        setLoading(false);
-        return;
+      if (!data.fuel_stations || data.fuel_stations.length === 0) {
+        // Try without status filter as fallback
+        const params2 = new URLSearchParams({
+          api_key: NREL_API_KEY,
+          fuel_type: 'E85',
+          latitude: latitude.toFixed(6),
+          longitude: longitude.toFixed(6),
+          radius: '100.0',
+          limit: '50',
+        });
+        const res2 = await fetch(`${NREL_URL}?${params2}`);
+        const data2 = await res2.json();
+
+        if (!data2.fuel_stations || data2.fuel_stations.length === 0) {
+          setError('No E85 stations found within 100 miles of your location.');
+          setLoading(false);
+          return;
+        }
+
+        const withDist = data2.fuel_stations
+          .map((s) => ({ ...s, distance: haversineDistance(latitude, longitude, s.latitude, s.longitude) }))
+          .sort((a, b) => a.distance - b.distance);
+        setStations(withDist);
+      } else {
+        const withDist = data.fuel_stations
+          .map((s) => ({ ...s, distance: haversineDistance(latitude, longitude, s.latitude, s.longitude) }))
+          .sort((a, b) => a.distance - b.distance);
+        setStations(withDist);
       }
-
-      const withDistance = data.fuel_stations.map((s) => ({
-        ...s,
-        distance: haversineDistance(latitude, longitude, s.latitude, s.longitude),
-      }));
-
-      withDistance.sort((a, b) => a.distance - b.distance);
-      setStations(withDistance);
     } catch (e) {
-      setError('Failed to fetch stations. Check your connection.');
+      setError(`Error: ${e.message}`);
     }
 
     setLoading(false);
@@ -83,9 +110,9 @@ export default function E85FinderScreen() {
     const url = Platform.OS === 'ios'
       ? `maps://?q=${label}&ll=${lat},${lng}`
       : `geo:${lat},${lng}?q=${lat},${lng}(${label})`;
-    Linking.openURL(url).catch(() => {
-      Linking.openURL(`https://maps.google.com/?q=${lat},${lng}`);
-    });
+    Linking.openURL(url).catch(() =>
+      Linking.openURL(`https://maps.google.com/?q=${lat},${lng}`)
+    );
   };
 
   const StationCard = ({ station }) => (
@@ -116,6 +143,10 @@ export default function E85FinderScreen() {
         }
       </TouchableOpacity>
 
+      {debugInfo && (
+        <Text style={styles.debugText}>{debugInfo}</Text>
+      )}
+
       {error && (
         <View style={styles.errorBox}>
           <Text style={styles.errorText}>{error}</Text>
@@ -123,7 +154,7 @@ export default function E85FinderScreen() {
       )}
 
       {stations.length > 0 && (
-        <Text style={styles.resultsLabel}>{stations.length} stations within 25 miles</Text>
+        <Text style={styles.resultsLabel}>{stations.length} E85 stations found nearby</Text>
       )}
 
       <FlatList
@@ -141,8 +172,9 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#0a0a0a', padding: 16 },
   title: { color: '#e51515', fontSize: 28, fontWeight: '800', marginTop: 12 },
   subtitle: { color: '#ffffff', fontSize: 18, fontWeight: '600', marginBottom: 20 },
-  findBtn: { backgroundColor: '#e51515', borderRadius: 10, padding: 16, alignItems: 'center', marginBottom: 16, minHeight: 52, justifyContent: 'center' },
+  findBtn: { backgroundColor: '#e51515', borderRadius: 10, padding: 16, alignItems: 'center', marginBottom: 10, minHeight: 52, justifyContent: 'center' },
   findBtnText: { color: '#fff', fontWeight: '800', fontSize: 16, letterSpacing: 1 },
+  debugText: { color: '#444', fontSize: 11, textAlign: 'center', marginBottom: 8 },
   errorBox: { backgroundColor: '#1a0a00', borderWidth: 1, borderColor: '#aa4400', borderRadius: 10, padding: 14, marginBottom: 14 },
   errorText: { color: '#ff6633', fontSize: 14 },
   resultsLabel: { color: '#666', fontSize: 13, marginBottom: 10, textAlign: 'center' },
