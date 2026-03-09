@@ -47,6 +47,7 @@ export default function DragyGPSScreen() {
   const deviceRef = useRef(null);
   const calcRef = useRef(new RunCalculator());
   const bufferRef = useRef('');
+  const logThrottleRef = useRef(0);
   const updateRef = useRef(null);
 
   useEffect(() => () => {
@@ -109,7 +110,15 @@ export default function DragyGPSScreen() {
               const { sentences, remaining } = splitNMEABuffer(bufferRef.current);
               bufferRef.current = remaining;
               sentences.forEach(line => {
-                addRaw(line.substring(0, 55));
+                if (!line.startsWith('@')) {
+                  addRaw(line.substring(0, 55));
+                } else {
+                  // Throttle @ sentence logging to 1/sec to avoid overwhelming React
+                  logThrottleRef.current++;
+                  if (logThrottleRef.current % 10 === 0) {
+                    addRaw(line.substring(0, 55));
+                  }
+                }
                 processLine(line);
               });
             } catch (e) { addRaw(`Err: ${e.message}`); }
@@ -138,7 +147,8 @@ export default function DragyGPSScreen() {
 
       updateRef.current = setInterval(() => {
         const calc = calcRef.current;
-        setSpeed(parseFloat(calc.getCurrentSpeed().toFixed(1)));
+        const raw = calc.getCurrentSpeed();
+        setSpeed(parseFloat((raw < 1.0 ? 0 : raw).toFixed(1)));
         setPeakSpeed(parseFloat(calc.getPeakSpeed().toFixed(1)));
         if (bracket.from === 0) {
           const t = calc.getTimeAt(bracket.to);
@@ -158,8 +168,6 @@ export default function DragyGPSScreen() {
   const processLine = (line) => {
     // Dragy proprietary '@' sentence — primary data source
     if (line.startsWith('@')) {
-      const parts = line.split(',');
-      addRaw(`🔍 fields[${parts.length}]: ${parts.map((p,i) => i+':'+p).join(' | ')}`);
       const dragy = parseDragySentence(line);
       if (dragy) {
         setGpsStatus(dragy.hasFix ? '✅ GPS Fix' : '⚠️ No Fix');
