@@ -48,6 +48,8 @@ export default function DragyGPSScreen() {
   const calcRef = useRef(new RunCalculator());
   const bufferRef = useRef('');
   const logThrottleRef = useRef(0);
+  const reconnectRef = useRef(false);
+  const lastDeviceRef = useRef(null);
   const updateRef = useRef(null);
 
   useEffect(() => () => {
@@ -83,6 +85,8 @@ export default function DragyGPSScreen() {
       const d = await bleManager.connectToDevice(device.id, { timeout: 15000 });
       await d.discoverAllServicesAndCharacteristics();
       deviceRef.current = d;
+      lastDeviceRef.current = device;
+      reconnectRef.current = true;
 
       const services = await d.services();
       const allChars = [];
@@ -103,7 +107,16 @@ export default function DragyGPSScreen() {
         monitored++;
         addRaw(`📡 Subscribing: ${uuid.replace('0000','')}...`);
         c.monitor((err, char) => {
-          if (err) { addRaw(`❌ BLE err [${uuid.replace('0000','')}]: ${err.message}`); return; }
+          if (err) {
+            addRaw(`❌ BLE err [${uuid.replace('0000','')}]: ${err.message}`);
+            // Auto-reconnect if unexpected disconnect
+            if (reconnectRef.current && lastDeviceRef.current && err.message?.includes('disconnect')) {
+              reconnectRef.current = false;
+              addRaw('🔄 Reconnecting...');
+              setTimeout(() => connect(lastDeviceRef.current), 2000);
+            }
+            return;
+          }
           if (!char?.value) return;
           try {
             const raw = decodeB64(char.value);
@@ -131,7 +144,7 @@ export default function DragyGPSScreen() {
       updateRef.current = setInterval(() => {
         const calc = calcRef.current;
         const raw = calc.getCurrentSpeed();
-        setSpeed(parseFloat((raw < 1.0 ? 0 : raw).toFixed(1)));
+        setSpeed(parseFloat((raw < 0.5 ? 0 : raw).toFixed(1)));
         setPeakSpeed(parseFloat(calc.getPeakSpeed().toFixed(1)));
         if (bracket.from === 0) {
           const t = calc.getTimeAt(bracket.to);
@@ -179,6 +192,7 @@ export default function DragyGPSScreen() {
   const startRun = () => { calcRef.current.reset(); setTimes({}); setPeakSpeed(0); setState(STATES.RECORDING); };
   const stopRun = () => setState(STATES.CONNECTED);
   const disconnect = () => {
+    reconnectRef.current = false; lastDeviceRef.current = null;
     clearInterval(updateRef.current); deviceRef.current?.cancelConnection(); deviceRef.current = null;
     setState(STATES.IDLE); setConnected(null); setSpeed(0); setPeakSpeed(0); setTimes({});
     setGpsStatus('—'); setRawLog(['Disconnected.']);
