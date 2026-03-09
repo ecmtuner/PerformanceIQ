@@ -1,10 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Alert } from 'react-native';
 import { bleManager, requestBLEPermissions, DRAGY_PREFIX } from '../services/BLEManager';
-import { parseNMEASpeed, parseNMEAVTG, RunCalculator, splitNMEABuffer } from '../services/DragyGPSService';
+import { parseNMEASpeed, parseNMEAVTG, parseFixStatus, RunCalculator, splitNMEABuffer } from '../services/DragyGPSService';
 
 const STATES = { IDLE: 'idle', SCANNING: 'scanning', CONNECTING: 'connecting', CONNECTED: 'connected', RECORDING: 'recording', ERROR: 'error' };
-
 const BRACKETS = [
   { label: '0–60 mph',    from: 0,   to: 60  },
   { label: '0–100 mph',   from: 0,   to: 100 },
@@ -13,14 +12,9 @@ const BRACKETS = [
   { label: '100–200 mph', from: 100, to: 200 },
 ];
 
-// Safe base64 decode without external library
 const decodeB64 = (b64) => {
-  try {
-    const binary = global.atob ? global.atob(b64) : Buffer.from(b64, 'base64').toString('binary');
-    return binary;
-  } catch {
-    try { return Buffer.from(b64, 'base64').toString('utf8'); } catch { return ''; }
-  }
+  try { return Buffer.from(b64, 'base64').toString('binary'); }
+  catch { try { return global.atob(b64); } catch { return ''; } }
 };
 
 export default function DragyGPSScreen() {
@@ -31,7 +25,8 @@ export default function DragyGPSScreen() {
   const [peakSpeed, setPeakSpeed] = useState(0);
   const [times, setTimes] = useState({});
   const [bracket, setBracket] = useState(BRACKETS[2]);
-  const [rawLog, setRawLog] = useState(['Waiting for connection...']);
+  const [gpsStatus, setGpsStatus] = useState('—');
+  const [rawLog, setRawLog] = useState(['Not connected yet.']);
   const deviceRef = useRef(null);
   const calcRef = useRef(new RunCalculator());
   const bufferRef = useRef('');
@@ -43,79 +38,63 @@ export default function DragyGPSScreen() {
     bleManager.stopDeviceScan();
   }, []);
 
-  const addRaw = (msg) => setRawLog(l => [`${msg}`, ...l.slice(0, 30)]);
+  const addRaw = (msg) => setRawLog(l => [msg, ...l.slice(0, 25)]);
 
   const scan = async () => {
     const granted = await requestBLEPermissions();
     if (!granted) { Alert.alert('Permission Required', 'Bluetooth permission is required.'); return; }
-    setState(STATES.SCANNING);
-    setDevices([]);
-    addRaw('Scanning...');
-
+    setState(STATES.SCANNING); setDevices([]);
+    addRaw('Scanning for Dragy...');
     bleManager.startDeviceScan(null, { allowDuplicates: false }, (error, device) => {
-      if (error) { setState(STATES.ERROR); addRaw(`Scan error: ${error.message}`); return; }
+      if (error) { setState(STATES.ERROR); addRaw(`Error: ${error.message}`); return; }
       if (device?.name?.startsWith(DRAGY_PREFIX)) {
-        bleManager.stopDeviceScan();
-        setState(STATES.IDLE);
+        bleManager.stopDeviceScan(); setState(STATES.IDLE);
         setDevices([{ id: device.id, name: device.name }]);
-        addRaw(`Found: ${device.name}`);
+        addRaw(`✅ Found: ${device.name}`);
       } else if (device?.name) {
         setDevices(d => d.find(x => x.id === device.id) ? d : [...d, { id: device.id, name: device.name }]);
       }
     });
-
-    setTimeout(() => {
-      bleManager.stopDeviceScan();
-      setState(prev => prev === STATES.SCANNING ? STATES.IDLE : prev);
-    }, 15000);
+    setTimeout(() => { bleManager.stopDeviceScan(); setState(p => p === STATES.SCANNING ? STATES.IDLE : p); }, 15000);
   };
 
   const connect = async (device) => {
-    bleManager.stopDeviceScan();
-    setState(STATES.CONNECTING);
+    bleManager.stopDeviceScan(); setState(STATES.CONNECTING);
     addRaw(`Connecting to ${device.name}...`);
-
     try {
       const d = await bleManager.connectToDevice(device.id, { timeout: 15000 });
       await d.discoverAllServicesAndCharacteristics();
       deviceRef.current = d;
-
       const services = await d.services();
-      addRaw(`Found ${services.length} service(s)`);
-
+      addRaw(`Found ${services.length} service(s):`);
       let monitored = 0;
       for (const svc of services) {
         addRaw(`SVC: ${svc.uuid}`);
         const chars = await svc.characteristics();
         for (const c of chars) {
-          const flags = [c.isNotifiable && 'N', c.isIndicatable && 'I', c.isReadable && 'R', c.isWritableWithResponse && 'W'].filter(Boolean).join('');
-          addRaw(`  CHAR: ${c.uuid} [${flags}]`);
-
+          const flags = [c.isNotifiable&&'N', c.isIndicatable&&'I', c.isReadable&&'R', c.isWritableWithResponse&&'W'].filter(Boolean).join('');
+          addRaw(`  CHAR ${c.uuid.substring(0,8)} [${flags}]`);
           if (c.isNotifiable || c.isIndicatable) {
             monitored++;
             c.monitor((err, char) => {
-              if (err) { addRaw(`Monitor err: ${err.message}`); return; }
-              if (!char?.value) return;
+              if (err || !char?.value) return;
               try {
                 const raw = decodeB64(char.value);
-                // Show printable chars, replace control chars with dot
-                const printable = raw.replace(/[^\x20-\x7E\r\n]/g, '.');
-                if (printable.trim()) addRaw(`DATA: ${printable.substring(0, 80)}`);
-
                 bufferRef.current += raw;
                 const { sentences, remaining } = splitNMEABuffer(bufferRef.current);
                 bufferRef.current = remaining;
-                sentences.forEach(line => processLine(line));
-              } catch (e) { addRaw(`Decode err: ${e.message}`); }
+                sentences.forEach(line => {
+                  // Show every NMEA sentence in debug
+                  addRaw(line.substring(0, 60));
+                  processLine(line);
+                });
+              } catch (e) { addRaw(`Err: ${e.message}`); }
             });
           }
         }
       }
-
-      addRaw(`Monitoring ${monitored} char(s) — waiting for data`);
-      setState(STATES.CONNECTED);
-      setConnected(device.name);
-
+      addRaw(`Monitoring ${monitored} char(s). GPS fix needed for speed.`);
+      setState(STATES.CONNECTED); setConnected(device.name);
       updateRef.current = setInterval(() => {
         const calc = calcRef.current;
         setSpeed(parseFloat(calc.getCurrentSpeed().toFixed(1)));
@@ -128,35 +107,28 @@ export default function DragyGPSScreen() {
           if (t) setTimes(prev => ({ ...prev, [bracket.label]: t }));
         }
       }, 100);
-
     } catch (e) {
-      addRaw(`Connect failed: ${e.message}`);
+      addRaw(`FAILED: ${e.message}`);
       Alert.alert('Connection Failed', e.message);
       setState(STATES.ERROR);
     }
   };
 
   const processLine = (line) => {
-    let spd = parseNMEASpeed(line);
+    const fix = parseFixStatus(line);
+    if (fix) setGpsStatus(fix === 'fix' ? '✅ GPS Fix' : '⚠️ No Fix (go outside)');
+    // Use requireFix=false so we still update speed even without fix (for testing)
+    let spd = parseNMEASpeed(line, false);
     if (spd === null) spd = parseNMEAVTG(line);
     if (spd !== null) calcRef.current.addSample(spd);
   };
 
-  const startRun = () => {
-    calcRef.current.reset();
-    setTimes({});
-    setPeakSpeed(0);
-    setState(STATES.RECORDING);
-  };
-
+  const startRun = () => { calcRef.current.reset(); setTimes({}); setPeakSpeed(0); setState(STATES.RECORDING); };
   const stopRun = () => setState(STATES.CONNECTED);
-
   const disconnect = () => {
-    clearInterval(updateRef.current);
-    deviceRef.current?.cancelConnection();
-    deviceRef.current = null;
+    clearInterval(updateRef.current); deviceRef.current?.cancelConnection(); deviceRef.current = null;
     setState(STATES.IDLE); setConnected(null); setSpeed(0); setPeakSpeed(0); setTimes({});
-    setRawLog(['Disconnected.']);
+    setGpsStatus('—'); setRawLog(['Disconnected.']);
   };
 
   const statusColor = { [STATES.CONNECTED]: '#4caf50', [STATES.RECORDING]: '#e51515', [STATES.SCANNING]: '#ffeb3b', [STATES.CONNECTING]: '#ff9800', [STATES.ERROR]: '#e51515', [STATES.IDLE]: '#555' };
@@ -168,18 +140,11 @@ export default function DragyGPSScreen() {
 
       <View style={styles.statusBar}>
         <View style={[styles.statusDot, { backgroundColor: statusColor[state] }]} />
-        <Text style={styles.statusText}>
-          {connected ? connected : state === STATES.SCANNING ? 'Scanning...' : state === STATES.CONNECTING ? 'Connecting...' : 'Not connected'}
-        </Text>
+        <Text style={styles.statusText}>{connected || (state === STATES.SCANNING ? 'Scanning...' : state === STATES.CONNECTING ? 'Connecting...' : 'Not connected')}</Text>
         {connected && <TouchableOpacity onPress={disconnect} style={styles.disconnectBtn}><Text style={styles.disconnectText}>Disconnect</Text></TouchableOpacity>}
       </View>
 
-      {!connected && (
-        <View style={styles.hintBox}>
-          <Text style={styles.hintText}>💡 Open Dragy app briefly to wake your GPS unit, then come back and tap Scan.</Text>
-        </View>
-      )}
-
+      {!connected && <View style={styles.hintBox}><Text style={styles.hintText}>💡 Open Dragy app briefly to wake your GPS unit, then come back and tap Scan.</Text></View>}
       {!connected && (
         <TouchableOpacity style={styles.scanBtn} onPress={scan} disabled={state === STATES.SCANNING || state === STATES.CONNECTING}>
           <Text style={styles.scanBtnText}>{state === STATES.SCANNING ? '🔍 Scanning...' : '🔍 Scan for Dragy'}</Text>
@@ -200,6 +165,12 @@ export default function DragyGPSScreen() {
 
       {connected && (
         <>
+          {/* GPS Fix status */}
+          <View style={[styles.card, { paddingVertical: 10 }]}>
+            <Text style={styles.fixStatus}>GPS: {gpsStatus}</Text>
+            {gpsStatus.includes('No Fix') && <Text style={styles.fixHint}>Take the Dragy outside or to your car for a GPS fix</Text>}
+          </View>
+
           <View style={styles.speedCard}>
             <Text style={styles.speedLabel}>SPEED</Text>
             <Text style={styles.speedValue}>{speed.toFixed(1)}</Text>
@@ -212,8 +183,7 @@ export default function DragyGPSScreen() {
             <ScrollView horizontal showsHorizontalScrollIndicator={false}>
               <View style={styles.bracketRow}>
                 {BRACKETS.map(b => (
-                  <TouchableOpacity key={b.label} style={[styles.bracketBtn, bracket.label === b.label && styles.bracketBtnActive]}
-                    onPress={() => { setBracket(b); setTimes({}); }}>
+                  <TouchableOpacity key={b.label} style={[styles.bracketBtn, bracket.label === b.label && styles.bracketBtnActive]} onPress={() => { setBracket(b); setTimes({}); }}>
                     <Text style={[styles.bracketBtnText, bracket.label === b.label && styles.bracketBtnTextActive]}>{b.label}</Text>
                   </TouchableOpacity>
                 ))}
@@ -221,15 +191,9 @@ export default function DragyGPSScreen() {
             </ScrollView>
           </View>
 
-          {state !== STATES.RECORDING ? (
-            <TouchableOpacity style={styles.recordBtn} onPress={startRun}>
-              <Text style={styles.recordBtnText}>⏺ START RUN</Text>
-            </TouchableOpacity>
-          ) : (
-            <TouchableOpacity style={[styles.recordBtn, styles.stopBtn]} onPress={stopRun}>
-              <Text style={styles.recordBtnText}>⏹ STOP RUN</Text>
-            </TouchableOpacity>
-          )}
+          {state !== STATES.RECORDING
+            ? <TouchableOpacity style={styles.recordBtn} onPress={startRun}><Text style={styles.recordBtnText}>⏺ START RUN</Text></TouchableOpacity>
+            : <TouchableOpacity style={[styles.recordBtn, styles.stopBtn]} onPress={stopRun}><Text style={styles.recordBtnText}>⏹ STOP RUN</Text></TouchableOpacity>}
 
           {Object.keys(times).length > 0 && (
             <View style={styles.card}>
@@ -245,15 +209,13 @@ export default function DragyGPSScreen() {
         </>
       )}
 
-      {/* ALWAYS VISIBLE debug log */}
+      {/* Always-visible debug log */}
       <View style={styles.debugCard}>
         <Text style={styles.sectionTitle}>📡 Debug Log</Text>
-        {rawLog.map((l, i) => (
-          <Text key={i} style={styles.rawLine}>{l}</Text>
-        ))}
+        {rawLog.map((l, i) => <Text key={i} style={styles.rawLine}>{l}</Text>)}
       </View>
 
-      <View style={{ height: 40 }} />
+      <View style={{ height: 60 }} />
     </ScrollView>
   );
 }
@@ -272,8 +234,9 @@ const styles = StyleSheet.create({
   scanBtn: { backgroundColor: '#1a1a1a', borderWidth: 1, borderColor: '#e51515', borderRadius: 10, padding: 16, alignItems: 'center', marginBottom: 14 },
   scanBtnText: { color: '#e51515', fontWeight: '700', fontSize: 15 },
   card: { backgroundColor: '#1a1a1a', borderRadius: 12, padding: 14, marginBottom: 14 },
-  debugCard: { backgroundColor: '#0f0f0f', borderWidth: 1, borderColor: '#222', borderRadius: 12, padding: 14, marginBottom: 14 },
   sectionTitle: { color: '#aaa', fontSize: 12, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 10 },
+  fixStatus: { color: '#fff', fontWeight: '700', fontSize: 14 },
+  fixHint: { color: '#888', fontSize: 12, marginTop: 4 },
   deviceRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: '#222' },
   deviceName: { color: '#fff', fontWeight: '700' },
   connectTap: { color: '#e51515', fontSize: 12 },
@@ -293,5 +256,6 @@ const styles = StyleSheet.create({
   timeRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: '#111' },
   timeLabel: { color: '#ccc', fontSize: 14 },
   timeValue: { color: '#e51515', fontSize: 20, fontWeight: '800' },
-  rawLine: { color: '#555', fontSize: 10, fontFamily: 'monospace', marginBottom: 3 },
+  debugCard: { backgroundColor: '#0f0f0f', borderWidth: 1, borderColor: '#222', borderRadius: 12, padding: 14, marginTop: 8 },
+  rawLine: { color: '#4a4a4a', fontSize: 10, fontFamily: 'monospace', marginBottom: 3 },
 });
