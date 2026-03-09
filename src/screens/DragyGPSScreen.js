@@ -3,6 +3,7 @@ import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Alert, Clipboard 
 import { bleManager, requestBLEPermissions, DRAGY_PREFIX } from '../services/BLEManager';
 import { atob, btoa } from 'react-native-quick-base64';
 import { parseNMEASpeed, parseNMEAVTG, parseFixStatus, parseDragySentence, RunCalculator, splitNMEABuffer } from '../services/DragyGPSService';
+import { setLastRun } from '../services/RunStore';
 
 const STATES = { IDLE: 'idle', SCANNING: 'scanning', CONNECTING: 'connecting', CONNECTED: 'connected', RECORDING: 'recording', ERROR: 'error' };
 const BRACKETS = [
@@ -265,11 +266,10 @@ export default function DragyGPSScreen() {
             ? <TouchableOpacity style={styles.recordBtn} onPress={startRun}><Text style={styles.recordBtnText}>⏺ START RUN</Text></TouchableOpacity>
             : <TouchableOpacity style={[styles.recordBtn, styles.stopBtn]} onPress={stopRun}><Text style={styles.recordBtnText}>⏹ STOP RUN</Text></TouchableOpacity>}
           {state === STATES.CONNECTED && calcRef.current.samples.length > 10 && (
-            <TouchableOpacity style={styles.resultsBtn} onPress={() => navigation?.navigate('DragyResults', {
-              samples: calcRef.current.samples,
-              altSamples: calcRef.current.altSamples,
-              satellites: 12,
-            })}>
+            <TouchableOpacity style={styles.resultsBtn} onPress={() => {
+              setLastRun(calcRef.current.samples, calcRef.current.altSamples || [], 12);
+              navigation?.navigate('DragyResults', {});
+            }}>
               <Text style={styles.resultsBtnText}>📊 View Results</Text>
             </TouchableOpacity>
           )}
