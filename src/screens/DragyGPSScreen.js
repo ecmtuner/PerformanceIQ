@@ -104,19 +104,14 @@ export default function DragyGPSScreen() {
             if (err || !char?.value) return;
             try {
               const raw = decodeB64(char.value);
-              // Show hex for non-printable, text for NMEA
-              if (raw.includes('$G')) {
-                bufferRef.current += raw;
-                const { sentences, remaining } = splitNMEABuffer(bufferRef.current);
-                bufferRef.current = remaining;
-                sentences.forEach(line => {
-                  addRaw(`NMEA: ${line.substring(0, 55)}`);
-                  processLine(line);
-                });
-              } else {
-                const hex = Array.from(raw).map(c => c.charCodeAt(0).toString(16).padStart(2,'0')).join(' ');
-                addRaw(`HEX [${shortId}]: ${hex.substring(0, 50)}`);
-              }
+              // Always buffer ALL data — Dragy uses @ not $
+              bufferRef.current += raw;
+              const { sentences, remaining } = splitNMEABuffer(bufferRef.current);
+              bufferRef.current = remaining;
+              sentences.forEach(line => {
+                addRaw(line.substring(0, 55));
+                processLine(line);
+              });
             } catch (e) { addRaw(`Err: ${e.message}`); }
           });
         }

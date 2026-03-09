@@ -100,15 +100,14 @@ export const parseDragySentence = (sentence) => {
     const s = sentence.trim();
     if (!s.startsWith('@')) return null;
     const parts = s.split(',');
-    // Field 5 = fix quality (0=no fix, 1=fix)
-    // Field 6 = speed in km/h
+    // Field 5 = fix quality (0=no fix, 1=GPS fix)
+    // Field 6 = speed in km/h (99.99 = no fix placeholder)
     const fixQuality = parseInt(parts[5]);
     const speedKmh = parseFloat(parts[6]);
     if (isNaN(speedKmh)) return null;
-    return {
-      speedMph: speedKmh * 0.621371,
-      hasFix: fixQuality > 0,
-      time: parts[2] || null,
-    };
+    const hasFix = fixQuality > 0;
+    // Return 0 speed when no fix — 99.99 is Dragy's "no data" value
+    const speedMph = hasFix ? speedKmh * 0.621371 : 0;
+    return { speedMph, hasFix, time: parts[2] || null };
   } catch { return null; }
 };
