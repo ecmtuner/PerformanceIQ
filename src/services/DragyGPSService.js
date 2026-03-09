@@ -93,38 +93,33 @@ export class RunCalculator {
   getPeakSpeed() { return this.samples.length > 0 ? Math.max(...this.samples.map(s => s.speedMph)) : 0; }
 }
 
-// Parse Dragy proprietary '@' sentence — TWO confirmed formats:
-//
-// Type A (10Hz, used when moving):
-//   @,<speed_kmh>,<time>,<lat>,<lon>,<hdop>,<alt>,M,<geoid>
-//   parts[1] = speed km/h  |  parts[7] = literal 'M' (meters)
-//
-// Type B (status, slower updates):
-//   @,<dop>,<time>,<lat>,<lon>,<fix(0/1)>,<sats>,<speed_kmh>,<heading>
-//   parts[5] = fix quality  |  parts[7] = numeric speed km/h
-//
-// Detect type: parts[7] === 'M'  →  Type A
+// Parse Dragy proprietary '@' sentence
+// CONFIRMED format (from drive log analysis):
+//   @,<speed_kmh>,<time>,<lat>,<lon>,<fix(0/1)>,<sats>,<altitude_m>,<heading>
+//   parts[1] = speed in km/h  ← ALWAYS the speed
+//   parts[5] = fix quality (0=no fix, 1=fix)
+//   parts[7] = altitude in meters (NOT speed — was ~0.79m = sea level, Moonachie NJ)
+// Occasional GGA-style variant: parts[7]='M' (altitude unit) — speed still at parts[1]
 export const parseDragySentence = (sentence) => {
   try {
     const s = sentence.trim();
     if (!s.startsWith('@')) return null;
     const parts = s.split(',');
-    if (parts.length < 8) return null;
+    if (parts.length < 6) return null;
 
-    // Type A: high-frequency speed sentence (parts[7] is literal 'M' for altitude unit)
+    // Speed is ALWAYS at parts[1]
+    const speedKmh = parseFloat(parts[1]);
+    if (isNaN(speedKmh) || speedKmh < 0) return null;
+
+    // Fix detection: normal sentences have parts[5]=0 or 1
+    // GGA-style variant has parts[7]='M' and fix implied by lat/lon presence
+    let hasFix;
     if (parts[7] === 'M' || parts[7] === 'm') {
-      const speedKmh = parseFloat(parts[1]);
-      if (isNaN(speedKmh) || speedKmh < 0) return null;
-      const hasFix = (parts[3] && parts[3].length > 0 && parts[4] && parts[4].length > 0);
-      return { speedMph: speedKmh * 0.621371, hasFix: !!hasFix, time: parts[2] || null, sentenceType: 'A' };
+      hasFix = !!(parts[3] && parts[3].length > 3);
+    } else {
+      hasFix = parseInt(parts[5]) > 0;
     }
 
-    // Type B: status sentence (parts[7] is numeric speed km/h)
-    const fixQuality = parseInt(parts[5]);
-    const speedKmh = parseFloat(parts[7]);
-    if (isNaN(speedKmh)) return null;
-    const hasFix = fixQuality > 0;
-    const speedMph = hasFix ? speedKmh * 0.621371 : 0;
-    return { speedMph, hasFix, time: parts[2] || null, sentenceType: 'B' };
+    return { speedMph: speedKmh * 0.621371, hasFix: !!hasFix, time: parts[2] || null };
   } catch { return null; }
 };
