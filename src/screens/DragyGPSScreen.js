@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Alert } from 'react-native';
 import { bleManager, requestBLEPermissions, DRAGY_PREFIX } from '../services/BLEManager';
-import { parseNMEASpeed, parseNMEAVTG, RunCalculator } from '../services/DragyGPSService';
+import { parseNMEASpeed, parseNMEAVTG, RunCalculator, splitNMEABuffer } from '../services/DragyGPSService';
 import { atob } from 'react-native-quick-base64';
 
 const STATES = { IDLE: 'idle', SCANNING: 'scanning', CONNECTING: 'connecting', CONNECTED: 'connected', RECORDING: 'recording', ERROR: 'error' };
@@ -84,12 +84,9 @@ export default function DragyGPSScreen() {
                 addRaw(`RAW: ${raw.replace(/[^\x20-\x7E]/g, '.')}`);
 
                 bufferRef.current += raw;
-                const lines = bufferRef.current.split('\n');
-                bufferRef.current = lines.pop();
-                lines.forEach(line => {
-                  const trimmed = line.trim();
-                  if (trimmed) processLine(trimmed);
-                });
+                const { sentences, remaining } = splitNMEABuffer(bufferRef.current);
+                bufferRef.current = remaining;
+                sentences.forEach(line => processLine(line));
               } catch (e) { addRaw(`Decode error: ${e.message}`); }
             });
           }
