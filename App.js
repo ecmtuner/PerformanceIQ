@@ -19,6 +19,8 @@ import RunLogbookScreen from './src/screens/RunLogbookScreen';
 import TuneNotesScreen from './src/screens/TuneNotesScreen';
 import CarProfileScreen from './src/screens/CarProfileScreen';
 import EthanolCalculatorScreen from './src/screens/EthanolCalculatorScreen';
+import OBD2Screen from './src/screens/OBD2Screen';
+import DragyGPSScreen from './src/screens/DragyGPSScreen';
 import E85FinderScreen from './src/screens/E85FinderScreen';
 
 const Tab = createBottomTabNavigator();
@@ -47,6 +49,8 @@ function ToolsStack() {
       <Stack.Screen name="RunLogbook"       component={RunLogbookScreen}       options={{ title: 'Run Logbook' }} />
       <Stack.Screen name="TuneNotes"        component={TuneNotesScreen}        options={{ title: 'Tune Notes' }} />
       <Stack.Screen name="CarProfile"       component={CarProfileScreen}       options={{ title: 'Car Profile' }} />
+      <Stack.Screen name="OBD2"            component={OBD2Screen}           options={{ title: 'OBD2 Scanner' }} />
+      <Stack.Screen name="DragyGPS"         component={DragyGPSScreen}       options={{ title: 'Dragy GPS Meter' }} />
       <Stack.Screen name="EthanolCalc"      component={EthanolCalculatorScreen}options={{ title: 'Ethanol Mix Calculator' }} />
       <Stack.Screen name="FindE85"          component={E85FinderScreen}        options={{ title: 'Find E85' }} />
     </Stack.Navigator>

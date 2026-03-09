@@ -14,6 +14,8 @@ const TOOLS = [
   { id: 'logbook',  emoji: '📓', title: 'Run Logbook',       sub: 'Saved runs',          screen: 'RunLogbook' },
   { id: 'notes',    emoji: '📝', title: 'Tune Notes',        sub: 'Session log',         screen: 'TuneNotes' },
   { id: 'car',      emoji: '🚗', title: 'Car Profile',       sub: 'Pre-fill calculators', screen: 'CarProfile' },
+  { id: 'obd2',     emoji: '🔌', title: 'OBD2 Scanner',      sub: 'Live vehicle data',    screen: 'OBD2' },
+  { id: 'dragy',    emoji: '📡', title: 'Dragy GPS',          sub: 'Performance meter',    screen: 'DragyGPS' },
 ];
 
 export default function HomeScreen({ navigation }) {

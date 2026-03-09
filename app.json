@@ -12,20 +12,43 @@
       "backgroundColor": "#ffffff"
     },
     "ios": {
-      "supportsTablet": true,
+      "supportsTablet": false,
+      "bundleIdentifier": "com.ecmtuner.performanceiq",
       "infoPlist": {
-        "NSLocationWhenInUseUsageDescription": "Used to find nearby E85 fuel stations."
+        "NSLocationWhenInUseUsageDescription": "Used to find nearby E85 fuel stations and measure GPS performance.",
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "Used for GPS performance measurement during runs.",
+        "NSBluetoothAlwaysUsageDescription": "Used to connect to OBD2 scanners and Dragy GPS module for live vehicle data.",
+        "NSBluetoothPeripheralUsageDescription": "Used to connect to OBD2 scanners and Dragy GPS module."
       }
     },
     "android": {
+      "package": "com.ecmtuner.performanceiq",
       "permissions": [
         "ACCESS_FINE_LOCATION",
-        "ACCESS_COARSE_LOCATION"
+        "ACCESS_COARSE_LOCATION",
+        "BLUETOOTH",
+        "BLUETOOTH_ADMIN",
+        "BLUETOOTH_CONNECT",
+        "BLUETOOTH_SCAN"
       ]
     },
     "web": {
       "favicon": "./assets/favicon.png"
     },
-    "plugins": []
+    "plugins": [
+      "expo-location",
+      "expo-dev-client",
+      [
+        "react-native-ble-plx",
+        {
+          "isBackgroundEnabled": true,
+          "modes": [
+            "peripheral",
+            "central"
+          ],
+          "bluetoothAlwaysPermission": "Allow PerformanceIQ to connect to OBD2 and Dragy GPS devices."
+        }
+      ]
+    ]
   }
 }
