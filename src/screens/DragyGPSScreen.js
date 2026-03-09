@@ -26,8 +26,7 @@ function ResultsModal({ run, onClose }) {
     return (
       <View style={rm.container}>
         <TouchableOpacity onPress={onClose} style={rm.closeBtn}><Text style={rm.closeText}>✕ Close</Text></TouchableOpacity>
-        <Text style={{ color: '#fff', textAlign: 'center', marginTop: 40 }}>No run data yet.{'
-'}Do a full run first.</Text>
+        <Text style={{ color: '#fff', textAlign: 'center', marginTop: 40 }}>No run data — start a run first.</Text>
       </View>
     );
   }
