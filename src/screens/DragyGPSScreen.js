@@ -168,11 +168,21 @@ export default function DragyGPSScreen() {
   const processLine = (line) => {
     // Dragy proprietary '@' sentence — primary data source
     if (line.startsWith('@')) {
+      const parts = line.split(',');
       const dragy = parseDragySentence(line);
       if (dragy) {
         setGpsStatus(dragy.hasFix ? '✅ GPS Fix' : '⚠️ No Fix');
         calcRef.current.addSample(dragy.speedMph);
+        // Throttled speed diagnostic — 1/sec
+        if (logThrottleRef.current % 10 === 0) {
+          addRaw(`fix:${parts[5]} sats:${parts[6]} kmh:${parts[7]} → ${dragy.speedMph.toFixed(2)}mph`);
+        }
+      } else {
+        if (logThrottleRef.current % 10 === 0) {
+          addRaw(`parse FAIL: ${line.substring(0,60)}`);
+        }
       }
+      logThrottleRef.current++;
       return;
     }
     // Fallback: standard NMEA (for other GPS devices)
