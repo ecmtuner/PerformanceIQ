@@ -156,6 +156,16 @@ export default function DragyGPSScreen() {
   };
 
   const processLine = (line) => {
+    // Dragy proprietary '@' sentence — primary data source
+    if (line.startsWith('@')) {
+      const dragy = parseDragySentence(line);
+      if (dragy) {
+        setGpsStatus(dragy.hasFix ? '✅ GPS Fix' : '⚠️ No Fix');
+        calcRef.current.addSample(dragy.speedMph);
+      }
+      return;
+    }
+    // Fallback: standard NMEA (for other GPS devices)
     const fix = parseFixStatus(line);
     if (fix) setGpsStatus(fix === 'fix' ? '✅ GPS Fix' : '⚠️ No Fix');
     let spd = parseNMEASpeed(line, false);
