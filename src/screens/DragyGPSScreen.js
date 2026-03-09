@@ -158,6 +158,8 @@ export default function DragyGPSScreen() {
   const processLine = (line) => {
     // Dragy proprietary '@' sentence — primary data source
     if (line.startsWith('@')) {
+      const parts = line.split(',');
+      addRaw(`🔍 fields[${parts.length}]: ${parts.map((p,i) => i+':'+p).join(' | ')}`);
       const dragy = parseDragySentence(line);
       if (dragy) {
         setGpsStatus(dragy.hasFix ? '✅ GPS Fix' : '⚠️ No Fix');
