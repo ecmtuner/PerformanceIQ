@@ -125,10 +125,11 @@ export default function DragyGPSScreen() {
             bufferRef.current = remaining;
             sentences.forEach(line => {
               processLine(line);
-              if (logThrottleRef.current % 10 === 0) {
-                addRaw(line.substring(0, 60));
+              // @ lines handled + incremented inside processLine
+              if (!line.startsWith("@")) {
+                if (logThrottleRef.current % 10 === 0) addRaw(line.substring(0, 60));
+                logThrottleRef.current++;
               }
-              logThrottleRef.current++;
             });
           } catch (e) { addRaw(`❌ Parse err: ${e.message}`); }
         });
@@ -169,16 +170,17 @@ export default function DragyGPSScreen() {
       if (dragy) {
         setGpsStatus(dragy.hasFix ? '✅ GPS Fix' : '⚠️ No Fix');
         calcRef.current.addSample(dragy.speedMph);
-        // Throttled speed diagnostic — 1/sec
-        if (logThrottleRef.current % 10 === 0) {
-          addRaw(`fix:${parts[5]} sats:${parts[6]} kmh:${parts[7]} → ${dragy.speedMph.toFixed(2)}mph`);
+        // Type A: ALWAYS log (high-freq speed sentence) — never throttle
+        if (dragy.sentenceType === 'A') {
+          addRaw(`🚀 TYPE-A p1:${parts[1]} → ${dragy.speedMph.toFixed(1)}mph`);
+        } else if (logThrottleRef.current % 10 === 0) {
+          // Type B: throttled, show all fields including p1
+          addRaw(`p1:${parts[1]} fix:${parts[5]} sats:${parts[6]} alt:${parts[7]} → ${dragy.speedMph.toFixed(2)}mph`);
         }
       } else {
-        if (logThrottleRef.current % 10 === 0) {
-          addRaw(`parse FAIL: ${line.substring(0,60)}`);
-        }
+        // ALWAYS log parse failures
+        addRaw(`❓ FAIL: ${line.substring(0,65)}`);
       }
-      logThrottleRef.current++;
       return;
     }
     // Fallback: standard NMEA (for other GPS devices)
