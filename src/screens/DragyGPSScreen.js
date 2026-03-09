@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Alert } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Alert, Clipboard } from 'react-native';
 import { bleManager, requestBLEPermissions, DRAGY_PREFIX } from '../services/BLEManager';
 import { atob, btoa } from 'react-native-quick-base64';
 import { parseNMEASpeed, parseNMEAVTG, parseFixStatus, parseDragySentence, RunCalculator, splitNMEABuffer } from '../services/DragyGPSService';
@@ -275,7 +275,12 @@ export default function DragyGPSScreen() {
       )}
 
       <View style={styles.debugCard}>
-        <Text style={styles.sectionTitle}>📡 Debug Log</Text>
+        <View style={{flexDirection:'row', justifyContent:'space-between', alignItems:'center', marginBottom:10}}>
+          <Text style={styles.sectionTitle}>📡 Debug Log</Text>
+          <TouchableOpacity onPress={() => { Clipboard.setString(rawLog.join('\n')); Alert.alert('Copied', 'Debug log copied to clipboard'); }} style={styles.copyBtn}>
+            <Text style={styles.copyBtnText}>📋 Copy</Text>
+          </TouchableOpacity>
+        </View>
         {rawLog.map((l, i) => <Text key={i} style={[styles.rawLine, l.includes('NMEA') && styles.nmea, l.includes('✅') && styles.good]}>{l}</Text>)}
       </View>
       <View style={{ height: 60 }} />
@@ -319,6 +324,8 @@ const styles = StyleSheet.create({
   timeLabel: { color: '#ccc', fontSize: 14 },
   timeValue: { color: '#e51515', fontSize: 20, fontWeight: '800' },
   debugCard: { backgroundColor: '#0f0f0f', borderWidth: 1, borderColor: '#222', borderRadius: 12, padding: 14, marginTop: 8 },
+  copyBtn: { borderWidth: 1, borderColor: '#444', borderRadius: 6, paddingHorizontal: 10, paddingVertical: 4 },
+  copyBtnText: { color: '#888', fontSize: 11, fontWeight: '600' },
   rawLine: { color: '#4a4a4a', fontSize: 10, fontFamily: 'monospace', marginBottom: 3 },
   nmea: { color: '#2a6a2a' },
   good: { color: '#4caf50' },

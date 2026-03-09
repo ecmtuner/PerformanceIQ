@@ -93,22 +93,38 @@ export class RunCalculator {
   getPeakSpeed() { return this.samples.length > 0 ? Math.max(...this.samples.map(s => s.speedMph)) : 0; }
 }
 
-// Parse Dragy proprietary '@' sentence format
-// Format: @,,HHMMSS.SS,,,fix_quality,speed_kmh,\r\n
+// Parse Dragy proprietary '@' sentence — TWO confirmed formats:
+//
+// Type A (10Hz, used when moving):
+//   @,<speed_kmh>,<time>,<lat>,<lon>,<hdop>,<alt>,M,<geoid>
+//   parts[1] = speed km/h  |  parts[7] = literal 'M' (meters)
+//
+// Type B (status, slower updates):
+//   @,<dop>,<time>,<lat>,<lon>,<fix(0/1)>,<sats>,<speed_kmh>,<heading>
+//   parts[5] = fix quality  |  parts[7] = numeric speed km/h
+//
+// Detect type: parts[7] === 'M'  →  Type A
 export const parseDragySentence = (sentence) => {
   try {
     const s = sentence.trim();
     if (!s.startsWith('@')) return null;
     const parts = s.split(',');
-    // Field 5 = fix quality (0=no fix, 1=GPS fix)
-    // Field 6 = satellite count
-    // Field 7 = speed in km/h (99.99 = no fix placeholder)
+    if (parts.length < 8) return null;
+
+    // Type A: high-frequency speed sentence (parts[7] is literal 'M' for altitude unit)
+    if (parts[7] === 'M' || parts[7] === 'm') {
+      const speedKmh = parseFloat(parts[1]);
+      if (isNaN(speedKmh) || speedKmh < 0) return null;
+      const hasFix = (parts[3] && parts[3].length > 0 && parts[4] && parts[4].length > 0);
+      return { speedMph: speedKmh * 0.621371, hasFix: !!hasFix, time: parts[2] || null, sentenceType: 'A' };
+    }
+
+    // Type B: status sentence (parts[7] is numeric speed km/h)
     const fixQuality = parseInt(parts[5]);
     const speedKmh = parseFloat(parts[7]);
     if (isNaN(speedKmh)) return null;
     const hasFix = fixQuality > 0;
-    // Return 0 speed when no fix — 99.99 is Dragy's "no data" value
     const speedMph = hasFix ? speedKmh * 0.621371 : 0;
-    return { speedMph, hasFix, time: parts[2] || null };
+    return { speedMph, hasFix, time: parts[2] || null, sentenceType: 'B' };
   } catch { return null; }
 };
