@@ -30,9 +30,10 @@ export default function TrapSpeedScreen() {
   };
 
   const handleShare = async () => {
-    const car = result.car;
+    const carProfile = await getCarProfile();
+    const carName = carProfile ? [carProfile.year, carProfile.make, carProfile.model].filter(Boolean).join(' ') : null;
     const grade = parseFloat(slope);
-    await Share.share({ message: ['⚡ PerformanceIQ — Trap Speed Corrected', car ? `🚗 ${car.year} ${car.make} ${car.model}` : '', `🏁 Raw Trap: ${measuredSpeed} mph`, `✅ Corrected: ${result.corrected} mph`, `📐 Slope: ${grade > 0 ? '+' : ''}${slope}%  (${result.delta} mph diff)`, '', '📲 PerformanceIQ App'].filter(Boolean).join('\n') });
+    await Share.share({ message: ['⚡ PerformanceIQ — Trap Speed Corrected', carName ? `🚗 ${carName}` : '', `🏁 Raw Trap: ${measuredSpeed} mph`, `✅ Corrected: ${result.corrected} mph`, `📐 Slope: ${grade > 0 ? '+' : ''}${slope}%  (${result.delta} mph diff)`, '', '📲 PerformanceIQ App'].filter(Boolean).join('\n') });
   };
 
   return (

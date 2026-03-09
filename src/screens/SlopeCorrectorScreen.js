@@ -45,12 +45,16 @@ export default function SlopeCorrectorScreen() {
     Alert.alert('Saved! ✅', 'Run saved to your logbook.');
   };
 
-  const handleShare = () => shareRun({
+  const handleShare = async () => {
+    const carProfile = await getCarProfile();
+    const carName = carProfile ? [carProfile.year, carProfile.make, carProfile.model].filter(Boolean).join(' ') : null;
+    shareRun({
     type: 'Roll Race', bracket: bracket.label,
     measuredTime, correctedTime: result.corrected,
     slope: parseFloat(slope), delta: result.delta,
-    car: result.car ? `${result.car.year} ${result.car.make} ${result.car.model}`.trim() : null,
+    car: carName,
   });
+  };
 
   const reset = () => { setMeasuredTime(''); setSlope(''); setResult(null); };
 
