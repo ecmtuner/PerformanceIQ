@@ -87,6 +87,8 @@ export default function DragyGPSScreen() {
       deviceRef.current = d;
       lastDeviceRef.current = device;
       reconnectRef.current = true;
+      bufferRef.current = '';  // clear stale buffer on (re)connect
+      calcRef.current.reset(); // clear stale samples on (re)connect
 
       const services = await d.services();
       const allChars = [];
