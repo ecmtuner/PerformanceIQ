@@ -1,11 +1,154 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Alert, Clipboard } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Alert, Clipboard, Modal, Dimensions } from 'react-native';
 import { bleManager, requestBLEPermissions, DRAGY_PREFIX } from '../services/BLEManager';
 import { atob, btoa } from 'react-native-quick-base64';
 import { parseNMEASpeed, parseNMEAVTG, parseFixStatus, parseDragySentence, RunCalculator, splitNMEABuffer } from '../services/DragyGPSService';
-import { setLastRun } from '../services/RunStore';
 
 const STATES = { IDLE: 'idle', SCANNING: 'scanning', CONNECTING: 'connecting', CONNECTED: 'connected', RECORDING: 'recording', ERROR: 'error' };
+
+const SCREEN_W = Dimensions.get('window').width;
+const SPLITS = [10, 20, 30, 40, 50, 60];
+const slopeCorr = (t, pct) => t ? (t / (1 + pct * 0.015)).toFixed(3) : null;
+
+function SpeedBar({ data }) {
+  if (!data || data.length < 2) return null;
+  const maxS = Math.max(1, ...data.map(d => d.s));
+  const bw = Math.max(1, (SCREEN_W - 48) / data.length);
+  return (
+    <View style={{ height: 130, flexDirection: 'row', alignItems: 'flex-end', backgroundColor: '#0d0d0d', borderRadius: 8, overflow: 'hidden' }}>
+      {data.map((d, i) => <View key={i} style={{ width: bw, height: Math.max(1, (d.s / maxS) * 130), backgroundColor: '#4fc3f7', opacity: 0.4 + 0.6 * (d.s / maxS) }} />)}
+    </View>
+  );
+}
+
+function ResultsModal({ run, onClose }) {
+  if (!run || !run.samples || run.samples.length < 2) {
+    return (
+      <View style={rm.container}>
+        <TouchableOpacity onPress={onClose} style={rm.closeBtn}><Text style={rm.closeText}>✕ Close</Text></TouchableOpacity>
+        <Text style={{ color: '#fff', textAlign: 'center', marginTop: 40 }}>No run data yet.{'
+'}Do a full run first.</Text>
+      </View>
+    );
+  }
+  const { samples, altSamples } = run;
+  const launchTime = samples[0].time;
+  const step = Math.max(1, Math.floor(samples.length / 100));
+
+  // Chart data
+  const chartData = [];
+  for (let i = 0; i < samples.length; i += step) {
+    chartData.push({ s: samples[i].speedMph || 0 });
+  }
+
+  // Slope
+  let slope = 0;
+  if (altSamples && altSamples.length >= 2) {
+    const altChangeFt = (altSamples[altSamples.length - 1].altM - altSamples[0].altM) * 3.28084;
+    let distFt = 0;
+    for (let i = 1; i < samples.length; i++) {
+      const dt = (samples[i].time - samples[i-1].time) / 3600000;
+      distFt += ((samples[i].speedMph + samples[i-1].speedMph) / 2) * dt * 5280;
+    }
+    slope = distFt > 10 ? parseFloat(((altChangeFt / distFt) * 100).toFixed(2)) : 0;
+  }
+
+  // Distance
+  let distFt = 0;
+  for (let i = 1; i < samples.length; i++) {
+    const dt = (samples[i].time - samples[i-1].time) / 3600000;
+    distFt += ((samples[i].speedMph + samples[i-1].speedMph) / 2) * dt * 5280;
+  }
+  distFt = parseFloat(distFt.toFixed(1));
+
+  // Splits
+  const splits = SPLITS.map(target => {
+    for (let i = 1; i < samples.length; i++) {
+      if (samples[i].speedMph >= target) {
+        const s0 = samples[i-1], s1 = samples[i];
+        const frac = (target - s0.speedMph) / ((s1.speedMph - s0.speedMph) || 1);
+        const t = ((s0.time + frac * (s1.time - s0.time)) - launchTime) / 1000;
+        const raw = t.toFixed(3);
+        return { label: `0-${target}`, raw, corr: slopeCorr(parseFloat(raw), slope) };
+      }
+    }
+    return { label: `0-${target}`, raw: null, corr: null };
+  });
+
+  const peakSpeed = Math.max(...samples.map(s => s.speedMph || 0)).toFixed(1);
+  const altFt = altSamples && altSamples.length > 0 ? (altSamples[0].altM * 3.28084).toFixed(0) : '—';
+  const t060 = splits.find(s => s.label === '0-60');
+
+  return (
+    <ScrollView style={rm.container}>
+      <View style={rm.header}>
+        <Text style={rm.title}>Performance Report</Text>
+        <TouchableOpacity onPress={onClose} style={rm.closeBtn}><Text style={rm.closeText}>✕</Text></TouchableOpacity>
+      </View>
+
+      <View style={rm.envBar}>
+        <Text style={rm.envItem}>⬆ {altFt}ft</Text>
+        <Text style={rm.envItem}>📐 {slope}%</Text>
+        <Text style={rm.envItem}>🏁 {peakSpeed} mph</Text>
+        <Text style={rm.envItem}>📏 {distFt}ft</Text>
+      </View>
+
+      <View style={rm.card}>
+        <Text style={rm.chartLabel}>⚡ SPEED (mph)</Text>
+        <SpeedBar data={chartData} />
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 4 }}>
+          <Text style={{ color: '#444', fontSize: 9 }}>0s</Text>
+          <Text style={{ color: '#4fc3f7', fontSize: 9 }}>Peak: {peakSpeed} mph</Text>
+          <Text style={{ color: '#444', fontSize: 9 }}>{((samples[samples.length-1].time - launchTime)/1000).toFixed(1)}s</Text>
+        </View>
+      </View>
+
+      <View style={rm.statsRow}>
+        <View style={rm.statBox}><Text style={rm.statVal}>{t060?.raw || '—'}s</Text><Text style={rm.statLbl}>0-60 Raw</Text></View>
+        <View style={rm.statBox}><Text style={[rm.statVal,{color:'#e51515'}]}>{t060?.corr || '—'}s</Text><Text style={rm.statLbl}>0-60 Corrected</Text></View>
+        <View style={rm.statBox}><Text style={rm.statVal}>{slope}%</Text><Text style={rm.statLbl}>Slope</Text></View>
+      </View>
+
+      <View style={rm.card}>
+        <Text style={rm.sectionTitle}>Split Times</Text>
+        <View style={{ flexDirection: 'row', marginBottom: 8 }}>
+          <Text style={[rm.c1,{color:'#555'}]}>Split</Text>
+          <Text style={[rm.c2,{color:'#555'}]}>Raw</Text>
+          <Text style={[rm.c3,{color:'#e51515'}]}>Slope Corrected</Text>
+        </View>
+        {splits.map(s => (
+          <View key={s.label} style={{ flexDirection: 'row', paddingVertical: 8, borderTopWidth: 1, borderTopColor: '#111' }}>
+            <Text style={rm.c1}>{s.label} mph</Text>
+            <Text style={rm.c2}>{s.raw ? `${s.raw}s` : '—'}</Text>
+            <Text style={[rm.c3, { color: s.corr ? '#e51515' : '#444' }]}>{s.corr ? `${s.corr}s` : '—'}</Text>
+          </View>
+        ))}
+      </View>
+      <View style={{ height: 60 }} />
+    </ScrollView>
+  );
+}
+
+const rm = StyleSheet.create({
+  container: { flex: 1, backgroundColor: '#0a0a0a' },
+  header: { flexDirection: 'row', alignItems: 'center', padding: 16, paddingTop: 48 },
+  title: { flex: 1, color: '#fff', fontSize: 18, fontWeight: '800' },
+  closeBtn: { padding: 8 },
+  closeText: { color: '#e51515', fontSize: 18, fontWeight: '700' },
+  envBar: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-around', backgroundColor: '#111', padding: 10, marginHorizontal: 16, borderRadius: 10, marginBottom: 12 },
+  envItem: { color: '#ccc', fontSize: 12, fontWeight: '600', padding: 3 },
+  card: { backgroundColor: '#1a1a1a', borderRadius: 12, margin: 16, marginBottom: 0, padding: 14 },
+  chartLabel: { color: '#666', fontSize: 10, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 6 },
+  statsRow: { flexDirection: 'row', margin: 16, gap: 10 },
+  statBox: { flex: 1, backgroundColor: '#1a1a1a', borderRadius: 10, padding: 12, alignItems: 'center' },
+  statVal: { color: '#fff', fontSize: 18, fontWeight: '800' },
+  statLbl: { color: '#555', fontSize: 9, textTransform: 'uppercase', marginTop: 3 },
+  sectionTitle: { color: '#aaa', fontSize: 11, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 8 },
+  c1: { flex: 2, color: '#ccc', fontSize: 13 },
+  c2: { flex: 1.5, color: '#fff', fontSize: 13, fontWeight: '700', textAlign: 'right' },
+  c3: { flex: 2, fontSize: 13, fontWeight: '700', textAlign: 'right' },
+});
+
 const BRACKETS = [
   { label: '0–60 mph',    from: 0,   to: 60  },
   { label: '0–100 mph',   from: 0,   to: 100 },
@@ -46,6 +189,7 @@ export default function DragyGPSScreen() {
   const [gpsStatus, setGpsStatus] = useState('—');
   const [rawLog, setRawLog] = useState(['Not connected yet.']);
   const [completedRun, setCompletedRun] = useState(null);
+  const [showResults, setShowResults] = useState(false);
   const deviceRef = useRef(null);
   const calcRef = useRef(new RunCalculator());
   const bufferRef = useRef('');
@@ -205,8 +349,7 @@ export default function DragyGPSScreen() {
       satellites: 12,
     };
     if (snap.samples.length > 2) {
-      setLastRun(snap.samples, snap.altSamples, snap.satellites);
-      setCompletedRun(snap);
+setCompletedRun(snap);
     }
     setState(STATES.CONNECTED);
   };
@@ -279,10 +422,15 @@ export default function DragyGPSScreen() {
             ? <TouchableOpacity style={styles.recordBtn} onPress={startRun}><Text style={styles.recordBtnText}>⏺ START RUN</Text></TouchableOpacity>
             : <TouchableOpacity style={[styles.recordBtn, styles.stopBtn]} onPress={stopRun}><Text style={styles.recordBtnText}>⏹ STOP RUN</Text></TouchableOpacity>}
           {completedRun && completedRun.samples.length > 2 && (
-            <TouchableOpacity style={styles.resultsBtn} onPress={() => navigation?.navigate('DragyResults', {})}>
+            <TouchableOpacity style={styles.resultsBtn} onPress={() => setShowResults(true)}>
               <Text style={styles.resultsBtnText}>📊 View Results</Text>
             </TouchableOpacity>
           )}
+
+          {/* Results Modal */}
+          <Modal visible={showResults} animationType="slide" onRequestClose={() => setShowResults(false)}>
+            <ResultsModal run={completedRun} onClose={() => setShowResults(false)} />
+          </Modal>
 
           {Object.keys(times).length > 0 && (
             <View style={styles.card}>
