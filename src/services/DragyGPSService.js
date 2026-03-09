@@ -43,7 +43,7 @@ export const parseFixStatus = (sentence) => {
 export const splitNMEABuffer = (buffer) => {
   const lines = buffer.split(/\r\n|\r|\n/);
   const remaining = lines.pop();
-  const complete = lines.map(l => l.trim()).filter(l => l.startsWith('$'));
+  const complete = lines.map(l => l.trim()).filter(l => l.startsWith('$') || l.startsWith('@'));
   return { sentences: complete, remaining };
 };
 
@@ -92,3 +92,23 @@ export class RunCalculator {
   getCurrentSpeed() { return this.samples.length > 0 ? this.samples[this.samples.length - 1].speedMph : 0; }
   getPeakSpeed() { return this.samples.length > 0 ? Math.max(...this.samples.map(s => s.speedMph)) : 0; }
 }
+
+// Parse Dragy proprietary '@' sentence format
+// Format: @,,HHMMSS.SS,,,fix_quality,speed_kmh,\r\n
+export const parseDragySentence = (sentence) => {
+  try {
+    const s = sentence.trim();
+    if (!s.startsWith('@')) return null;
+    const parts = s.split(',');
+    // Field 5 = fix quality (0=no fix, 1=fix)
+    // Field 6 = speed in km/h
+    const fixQuality = parseInt(parts[5]);
+    const speedKmh = parseFloat(parts[6]);
+    if (isNaN(speedKmh)) return null;
+    return {
+      speedMph: speedKmh * 0.621371,
+      hasFix: fixQuality > 0,
+      time: parts[2] || null,
+    };
+  } catch { return null; }
+};

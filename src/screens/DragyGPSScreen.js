@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Alert } from 'react-native';
 import { bleManager, requestBLEPermissions, DRAGY_PREFIX } from '../services/BLEManager';
 import { atob, btoa } from 'react-native-quick-base64';
-import { parseNMEASpeed, parseNMEAVTG, parseFixStatus, RunCalculator, splitNMEABuffer } from '../services/DragyGPSService';
+import { parseNMEASpeed, parseNMEAVTG, parseFixStatus, parseDragySentence, RunCalculator, splitNMEABuffer } from '../services/DragyGPSService';
 
 const STATES = { IDLE: 'idle', SCANNING: 'scanning', CONNECTING: 'connecting', CONNECTED: 'connected', RECORDING: 'recording', ERROR: 'error' };
 const BRACKETS = [
