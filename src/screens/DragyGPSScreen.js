@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Alert } from 'react-native';
 import { bleManager, requestBLEPermissions, DRAGY_PREFIX } from '../services/BLEManager';
+import { atob, btoa } from 'react-native-quick-base64';
 import { parseNMEASpeed, parseNMEAVTG, parseFixStatus, RunCalculator, splitNMEABuffer } from '../services/DragyGPSService';
 
 const STATES = { IDLE: 'idle', SCANNING: 'scanning', CONNECTING: 'connecting', CONNECTED: 'connected', RECORDING: 'recording', ERROR: 'error' };
@@ -16,7 +17,7 @@ const BRACKETS = [
 const DRAGY_CMD_CHARS   = ['00001018', '0000fd01', '0000fd03']; // write = send start command
 const DRAGY_DATA_CHARS  = ['0000fd04', '0000fd02', '00001014']; // notify = data comes out
 
-const b64 = (bytes) => Buffer.from(bytes).toString('base64');
+const b64 = (bytes) => btoa(String.fromCharCode(...bytes));
 
 // Start commands to try — targeting eHong BLE module + u-blox M8
 const START_COMMANDS = [
@@ -29,8 +30,8 @@ const START_COMMANDS = [
 ];
 
 const decodeB64 = (b64str) => {
-  try { return Buffer.from(b64str, 'base64').toString('binary'); }
-  catch { try { return global.atob(b64str); } catch { return ''; } }
+  try { return atob(b64str); }
+  catch { return ''; }
 };
 
 export default function DragyGPSScreen() {
