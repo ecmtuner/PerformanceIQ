@@ -23,8 +23,6 @@
     },
     "android": {
       "package": "com.ecmtuner.performanceiq",
-      "compileSdkVersion": 34,
-      "targetSdkVersion": 34,
       "permissions": [
         "android.permission.ACCESS_FINE_LOCATION",
         "android.permission.ACCESS_COARSE_LOCATION",
@@ -50,8 +48,20 @@
         "react-native-ble-plx",
         {
           "isBackgroundEnabled": true,
-          "modes": ["peripheral", "central"],
+          "modes": [
+            "peripheral",
+            "central"
+          ],
           "bluetoothAlwaysPermission": "Allow PerformanceIQ to connect to OBD2 and Dragy GPS devices."
+        }
+      ],
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "compileSdkVersion": 34,
+            "targetSdkVersion": 34
+          }
         }
       ]
     ]
