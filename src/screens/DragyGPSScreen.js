@@ -1,16 +1,17 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Alert } from 'react-native';
-import { bleManager, requestBLEPermissions, DRAGY_PREFIX, NORDIC_UART_SERVICE, NORDIC_UART_RX } from '../services/BLEManager';
+import { bleManager, requestBLEPermissions, DRAGY_PREFIX } from '../services/BLEManager';
 import { parseNMEASpeed, parseNMEAVTG, RunCalculator } from '../services/DragyGPSService';
+import { atob } from 'react-native-quick-base64';
 
 const STATES = { IDLE: 'idle', SCANNING: 'scanning', CONNECTING: 'connecting', CONNECTED: 'connected', RECORDING: 'recording', ERROR: 'error' };
 
 const BRACKETS = [
-  { label: '0–60 mph',     from: 0,   to: 60  },
-  { label: '0–100 mph',    from: 0,   to: 100 },
-  { label: '60–130 mph',   from: 60,  to: 130 },
-  { label: '100–150 mph',  from: 100, to: 150 },
-  { label: '100–200 mph',  from: 100, to: 200 },
+  { label: '0–60 mph',    from: 0,   to: 60  },
+  { label: '0–100 mph',   from: 0,   to: 100 },
+  { label: '60–130 mph',  from: 60,  to: 130 },
+  { label: '100–150 mph', from: 100, to: 150 },
+  { label: '100–200 mph', from: 100, to: 200 },
 ];
 
 export default function DragyGPSScreen() {
@@ -20,7 +21,8 @@ export default function DragyGPSScreen() {
   const [speed, setSpeed] = useState(0);
   const [peakSpeed, setPeakSpeed] = useState(0);
   const [times, setTimes] = useState({});
-  const [bracket, setBracket] = useState(BRACKETS[2]); // default 60-130
+  const [bracket, setBracket] = useState(BRACKETS[2]);
+  const [rawLog, setRawLog] = useState([]);
   const deviceRef = useRef(null);
   const calcRef = useRef(new RunCalculator());
   const bufferRef = useRef('');
@@ -31,6 +33,8 @@ export default function DragyGPSScreen() {
     deviceRef.current?.cancelConnection();
     bleManager.stopDeviceScan();
   }, []);
+
+  const addRaw = (msg) => setRawLog(l => [msg, ...l.slice(0, 20)]);
 
   const scan = async () => {
     const granted = await requestBLEPermissions();
@@ -61,41 +65,46 @@ export default function DragyGPSScreen() {
       await d.discoverAllServicesAndCharacteristics();
       deviceRef.current = d;
 
-      // Try Nordic UART first, then scan all services
       const services = await d.services();
-      let notifyChar = null;
+      addRaw(`Services: ${services.map(s => s.uuid).join(', ')}`);
 
+      let monitored = 0;
       for (const svc of services) {
         const chars = await svc.characteristics();
         for (const c of chars) {
-          if (c.isNotifiable || c.isIndicatable) notifyChar = c;
+          addRaw(`Char: ${c.uuid} notify=${c.isNotifiable} indicate=${c.isIndicatable} read=${c.isReadable}`);
+          if (c.isNotifiable || c.isIndicatable) {
+            monitored++;
+            c.monitor((err, char) => {
+              if (err || !char?.value) return;
+              try {
+                const raw = atob(char.value);
+                // Log raw hex for debugging
+                const hex = Array.from(raw).map(c => c.charCodeAt(0).toString(16).padStart(2,'0')).join(' ');
+                addRaw(`RAW: ${raw.replace(/[^\x20-\x7E]/g, '.')}`);
+
+                bufferRef.current += raw;
+                const lines = bufferRef.current.split('\n');
+                bufferRef.current = lines.pop();
+                lines.forEach(line => {
+                  const trimmed = line.trim();
+                  if (trimmed) processLine(trimmed);
+                });
+              } catch (e) { addRaw(`Decode error: ${e.message}`); }
+            });
+          }
         }
       }
 
-      if (!notifyChar) throw new Error('No data characteristic found');
-
-      notifyChar.monitor((err, char) => {
-        if (err || !char?.value) return;
-        try {
-          const decoded = atob(char.value);
-          bufferRef.current += decoded;
-          const lines = bufferRef.current.split('\n');
-          bufferRef.current = lines.pop();
-          lines.forEach(line => processLine(line.trim()));
-        } catch {}
-      });
-
+      addRaw(`Monitoring ${monitored} characteristic(s)`);
       setState(STATES.CONNECTED);
       setConnected(device.name);
 
-      // Update UI at 10Hz
       updateRef.current = setInterval(() => {
         const calc = calcRef.current;
         const spd = calc.getCurrentSpeed();
         setSpeed(parseFloat(spd.toFixed(1)));
         setPeakSpeed(parseFloat(calc.getPeakSpeed().toFixed(1)));
-
-        // Check times for selected bracket
         if (bracket.from === 0) {
           const t = calc.getTimeAt(bracket.to);
           if (t) setTimes(prev => ({ ...prev, [bracket.label]: t }));
@@ -112,9 +121,21 @@ export default function DragyGPSScreen() {
   };
 
   const processLine = (line) => {
+    // Try NMEA standard sentences
     let spd = parseNMEASpeed(line);
     if (spd === null) spd = parseNMEAVTG(line);
-    if (spd !== null) calcRef.current.addSample(spd);
+    if (spd !== null) {
+      calcRef.current.addSample(spd);
+      return;
+    }
+    // Try comma-separated speed value (some proprietary formats)
+    const parts = line.split(',');
+    for (const p of parts) {
+      const n = parseFloat(p);
+      if (!isNaN(n) && n >= 0 && n < 300) {
+        // Could be speed in mph or km/h — will analyze from raw log
+      }
+    }
   };
 
   const startRun = () => {
@@ -130,7 +151,7 @@ export default function DragyGPSScreen() {
     clearInterval(updateRef.current);
     deviceRef.current?.cancelConnection();
     deviceRef.current = null;
-    setState(STATES.IDLE); setConnected(null); setSpeed(0); setPeakSpeed(0); setTimes({});
+    setState(STATES.IDLE); setConnected(null); setSpeed(0); setPeakSpeed(0); setTimes({}); setRawLog([]);
   };
 
   const statusColor = { [STATES.CONNECTED]: '#4caf50', [STATES.RECORDING]: '#e51515', [STATES.SCANNING]: '#ffeb3b', [STATES.CONNECTING]: '#ff9800', [STATES.ERROR]: '#e51515', [STATES.IDLE]: '#555' };
@@ -140,30 +161,26 @@ export default function DragyGPSScreen() {
       <Text style={styles.title}>Dragy GPS</Text>
       <Text style={styles.subtitle}>Performance Meter</Text>
 
-      {/* Status */}
       <View style={styles.statusBar}>
         <View style={[styles.statusDot, { backgroundColor: statusColor[state] }]} />
         <Text style={styles.statusText}>
-          {connected ? `${connected}` : state === STATES.SCANNING ? 'Scanning...' : state === STATES.CONNECTING ? 'Connecting...' : 'Not connected'}
+          {connected ? connected : state === STATES.SCANNING ? 'Scanning...' : state === STATES.CONNECTING ? 'Connecting...' : 'Not connected'}
         </Text>
         {connected && <TouchableOpacity onPress={disconnect} style={styles.disconnectBtn}><Text style={styles.disconnectText}>Disconnect</Text></TouchableOpacity>}
       </View>
 
-      {/* Wake-up hint */}
       {!connected && (
         <View style={styles.hintBox}>
           <Text style={styles.hintText}>💡 Open Dragy app briefly to wake your GPS unit, then come back and tap Scan.</Text>
         </View>
       )}
 
-      {/* Scan button */}
       {!connected && (
         <TouchableOpacity style={styles.scanBtn} onPress={scan} disabled={state === STATES.SCANNING || state === STATES.CONNECTING}>
           <Text style={styles.scanBtnText}>{state === STATES.SCANNING ? '🔍 Scanning...' : '🔍 Scan for Dragy'}</Text>
         </TouchableOpacity>
       )}
 
-      {/* Device list */}
       {devices.length > 0 && !connected && (
         <View style={styles.card}>
           <Text style={styles.sectionTitle}>Found Devices</Text>
@@ -176,7 +193,6 @@ export default function DragyGPSScreen() {
         </View>
       )}
 
-      {/* Live speed display */}
       {connected && (
         <>
           <View style={styles.speedCard}>
@@ -186,7 +202,6 @@ export default function DragyGPSScreen() {
             <Text style={styles.peakSpeed}>Peak: {peakSpeed.toFixed(1)} mph</Text>
           </View>
 
-          {/* Bracket selector */}
           <View style={styles.card}>
             <Text style={styles.sectionTitle}>Measure Bracket</Text>
             <ScrollView horizontal showsHorizontalScrollIndicator={false}>
@@ -200,7 +215,6 @@ export default function DragyGPSScreen() {
             </ScrollView>
           </View>
 
-          {/* Record button */}
           {state !== STATES.RECORDING ? (
             <TouchableOpacity style={styles.recordBtn} onPress={startRun}>
               <Text style={styles.recordBtnText}>⏺ START RUN</Text>
@@ -211,7 +225,6 @@ export default function DragyGPSScreen() {
             </TouchableOpacity>
           )}
 
-          {/* Times */}
           {Object.keys(times).length > 0 && (
             <View style={styles.card}>
               <Text style={styles.sectionTitle}>Results</Text>
@@ -220,6 +233,16 @@ export default function DragyGPSScreen() {
                   <Text style={styles.timeLabel}>{label}</Text>
                   <Text style={styles.timeValue}>{t}s</Text>
                 </View>
+              ))}
+            </View>
+          )}
+
+          {/* RAW DATA DEBUG - shows what Dragy is actually sending */}
+          {rawLog.length > 0 && (
+            <View style={styles.card}>
+              <Text style={styles.sectionTitle}>📡 Raw Data (Debug)</Text>
+              {rawLog.slice(0, 12).map((l, i) => (
+                <Text key={i} style={styles.rawLine}>{l}</Text>
               ))}
             </View>
           )}
@@ -264,4 +287,5 @@ const styles = StyleSheet.create({
   timeRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: '#111' },
   timeLabel: { color: '#ccc', fontSize: 14 },
   timeValue: { color: '#e51515', fontSize: 20, fontWeight: '800' },
+  rawLine: { color: '#444', fontSize: 10, fontFamily: 'monospace', marginBottom: 2 },
 });
