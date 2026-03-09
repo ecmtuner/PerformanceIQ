@@ -93,7 +93,34 @@ export default function DragyGPSScreen() {
           }
         }
       }
-      addRaw(`Monitoring ${monitored} char(s). GPS fix needed for speed.`);
+      addRaw(`Monitoring ${monitored} char(s). Sending start commands...`);
+
+      // Try to trigger NMEA stream by writing common start sequences
+      // to all writable characteristics
+      for (const svc of services) {
+        const chars = await svc.characteristics();
+        for (const c of chars) {
+          if (c.isWritableWithResponse || c.isWritableWithoutResponse) {
+            try {
+              // Common BLE GPS module wake/start commands (base64 encoded)
+              const triggers = [
+                btoa('\r\n'),      // carriage return
+                btoa('\x00'),      // null byte
+                btoa('\x01'),      // start byte
+                btoa('start\r\n'),// ASCII start
+              ];
+              for (const t of triggers) {
+                try {
+                  if (c.isWritableWithResponse) await c.writeWithResponse(t);
+                  else await c.writeWithoutResponse(t);
+                  addRaw(`Sent trigger to ${c.uuid.substring(0,8)}`);
+                  await new Promise(r => setTimeout(r, 200));
+                } catch {}
+              }
+            } catch (e) { addRaw(`Write failed: ${e.message}`); }
+          }
+        }
+      }
       setState(STATES.CONNECTED); setConnected(device.name);
       updateRef.current = setInterval(() => {
         const calc = calcRef.current;
