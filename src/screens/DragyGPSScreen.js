@@ -122,21 +122,8 @@ export default function DragyGPSScreen() {
         addRaw(`✅ Subscribed: ${uuid.replace('0000','')}`);
       }
 
-      // 2. Send start commands to all writable characteristics
-      await new Promise(r => setTimeout(r, 500));
-      for (const c of allChars) {
-        const shortId = c.uuid.replace(/-.*/, '').replace('0000', '');
-        if (c.isWritableWithResponse || c.isWritableWithoutResponse) {
-          for (const cmd of START_COMMANDS) {
-            try {
-              if (c.isWritableWithResponse) await c.writeWithResponse(cmd);
-              else await c.writeWithoutResponse(cmd);
-              await new Promise(r => setTimeout(r, 150));
-            } catch {}
-          }
-          addRaw(`✉️ Sent ${START_COMMANDS.length} cmds → ${shortId}`);
-        }
-      }
+      // Dragy streams data automatically on subscription — NO write commands needed
+      // Writing to fd01 was found to crash the BLE module and disconnect the device
 
       addRaw(`Monitoring ${monitored} chars. Waiting for data...`);
       setState(STATES.CONNECTED); setConnected(device.name);
