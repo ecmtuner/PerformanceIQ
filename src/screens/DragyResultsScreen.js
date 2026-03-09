@@ -1,6 +1,6 @@
 import React, { useMemo } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Share } from 'react-native';
-import { LineChart, CartesianChart, Line } from 'victory-native';
+import SimpleLineChart from '../components/SimpleLineChart';
 
 const SPLITS = [10, 20, 30, 40, 50, 60];
 
@@ -138,23 +138,16 @@ export default function DragyResultsScreen({ route, navigation }) {
       {/* Chart */}
       {chartPoints.length > 2 && (
         <View style={styles.chartCard}>
-          <Text style={styles.legend}>
-            <Text style={{color:'#4fc3f7'}}>● Speed(mph)  </Text>
-            <Text style={{color:'#a5d6a7'}}>● Accel(g)</Text>
-          </Text>
-          <View style={{ height: 200 }}>
-            <CartesianChart
-              data={chartPoints}
-              xKey="t"
-              yKeys={["speed", "accel"]}
-              domainPadding={{ left: 0, right: 0 }}
-            >
-              {({ points, chartBounds }) => (<>
-                <Line points={points.speed} color="#4fc3f7" strokeWidth={2} animate={{ type: 'timing', duration: 300 }} />
-                <Line points={points.accel} color="#ffb74d" strokeWidth={1.5} animate={{ type: 'timing', duration: 300 }} />
-              </>)}
-            </CartesianChart>
-          </View>
+          <Text style={styles.chartTitle}>Speed & Acceleration vs Time</Text>
+          <SimpleLineChart
+            data={chartPoints}
+            width={340}
+            height={180}
+            lines={[
+              { xKey: 't', yKey: 'speed', color: '#4fc3f7', label: 'Speed (mph)' },
+              { xKey: 't', yKey: 'accel', color: '#ffb74d', label: 'Accel (g)' },
+            ]}
+          />
         </View>
       )}
 
@@ -220,7 +213,8 @@ const styles = StyleSheet.create({
   envBar: { flexDirection: 'row', justifyContent: 'space-around', backgroundColor: '#1a1a1a', padding: 10, marginHorizontal: 16, borderRadius: 10, marginBottom: 12 },
   envItem: { color: '#ccc', fontSize: 13, fontWeight: '600' },
   chartCard: { backgroundColor: '#111', borderRadius: 12, margin: 16, marginBottom: 0, padding: 12 },
-  legend: { fontSize: 11, marginBottom: 8 },
+  chartTitle: { color: '#666', fontSize: 11, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 6 },
+
   statsRow: { flexDirection: 'row', margin: 16, gap: 10 },
   statBox: { flex: 1, backgroundColor: '#1a1a1a', borderRadius: 10, padding: 12, alignItems: 'center' },
   statIcon: { fontSize: 18, marginBottom: 4 },
