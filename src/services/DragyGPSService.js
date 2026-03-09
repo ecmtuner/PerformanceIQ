@@ -48,15 +48,17 @@ export const splitNMEABuffer = (buffer) => {
 };
 
 export class RunCalculator {
-  constructor() { this.samples = []; this.launched = false; this.launchTime = null; }
+  constructor() { this.samples = []; this.altSamples = []; this.launched = false; this.launchTime = null; }
 
-  addSample(speedMph) {
+  addSample(speedMph, altM = 0) {
     const now = Date.now();
     this.samples.push({ time: now, speedMph });
+    this.altSamples.push({ time: now, altM });
     if (!this.launched && speedMph >= 3) {
       this.launched = true;
       this.launchTime = now;
       this.samples = [{ time: now, speedMph }];
+      this.altSamples = [{ time: now, altM }];
     }
   }
 
@@ -88,7 +90,7 @@ export class RunCalculator {
     return null;
   }
 
-  reset() { this.samples = []; this.launched = false; this.launchTime = null; }
+  reset() { this.samples = []; this.altSamples = []; this.launched = false; this.launchTime = null; }
   getCurrentSpeed() { return this.samples.length > 0 ? this.samples[this.samples.length - 1].speedMph : 0; }
   getPeakSpeed() { return this.samples.length > 0 ? Math.max(...this.samples.map(s => s.speedMph)) : 0; }
 }

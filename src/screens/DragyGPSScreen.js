@@ -171,7 +171,8 @@ export default function DragyGPSScreen() {
       const dragy = parseDragySentence(line);
       if (dragy) {
         setGpsStatus(dragy.hasFix ? '✅ GPS Fix' : '⚠️ No Fix');
-        calcRef.current.addSample(dragy.speedMph);
+        const altM = parseFloat(parts[7]) || 0;
+        calcRef.current.addSample(dragy.speedMph, isNaN(altM) ? 0 : altM);
         // Type A: ALWAYS log (high-freq speed sentence) — never throttle
         if (dragy.sentenceType === 'A') {
           addRaw(`🚀 TYPE-A p1:${parts[1]} → ${dragy.speedMph.toFixed(1)}mph`);
@@ -263,6 +264,15 @@ export default function DragyGPSScreen() {
           {state !== STATES.RECORDING
             ? <TouchableOpacity style={styles.recordBtn} onPress={startRun}><Text style={styles.recordBtnText}>⏺ START RUN</Text></TouchableOpacity>
             : <TouchableOpacity style={[styles.recordBtn, styles.stopBtn]} onPress={stopRun}><Text style={styles.recordBtnText}>⏹ STOP RUN</Text></TouchableOpacity>}
+          {state === STATES.CONNECTED && calcRef.current.samples.length > 10 && (
+            <TouchableOpacity style={styles.resultsBtn} onPress={() => navigation?.navigate('DragyResults', {
+              samples: calcRef.current.samples,
+              altSamples: calcRef.current.altSamples,
+              satellites: 12,
+            })}>
+              <Text style={styles.resultsBtnText}>📊 View Results</Text>
+            </TouchableOpacity>
+          )}
 
           {Object.keys(times).length > 0 && (
             <View style={styles.card}>
@@ -322,6 +332,8 @@ const styles = StyleSheet.create({
   bracketBtnText: { color: '#888', fontSize: 13, fontWeight: '600' },
   bracketBtnTextActive: { color: '#e51515' },
   recordBtn: { backgroundColor: '#e51515', borderRadius: 10, padding: 18, alignItems: 'center', marginBottom: 14 },
+  resultsBtn: { backgroundColor: '#1a1a1a', borderWidth: 1, borderColor: '#e51515', borderRadius: 10, padding: 14, alignItems: 'center', marginBottom: 14 },
+  resultsBtnText: { color: '#e51515', fontWeight: '700', fontSize: 15 },
   stopBtn: { backgroundColor: '#333' },
   recordBtnText: { color: '#fff', fontWeight: '800', fontSize: 16, letterSpacing: 2 },
   timeRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: '#111' },

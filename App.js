@@ -21,6 +21,7 @@ import CarProfileScreen from './src/screens/CarProfileScreen';
 import EthanolCalculatorScreen from './src/screens/EthanolCalculatorScreen';
 import OBD2Screen from './src/screens/OBD2Screen';
 import DragyGPSScreen from './src/screens/DragyGPSScreen';
+import DragyResultsScreen from './src/screens/DragyResultsScreen';
 import E85FinderScreen from './src/screens/E85FinderScreen';
 
 const Tab = createBottomTabNavigator();
@@ -51,6 +52,7 @@ function ToolsStack() {
       <Stack.Screen name="CarProfile"       component={CarProfileScreen}       options={{ title: 'Car Profile' }} />
       <Stack.Screen name="OBD2"            component={OBD2Screen}           options={{ title: 'OBD2 Scanner' }} />
       <Stack.Screen name="DragyGPS"         component={DragyGPSScreen}       options={{ title: 'Dragy GPS Meter' }} />
+      <Stack.Screen name="DragyResults"     component={DragyResultsScreen}   options={{ title: 'Performance Report', headerShown: false }} />
       <Stack.Screen name="EthanolCalc"      component={EthanolCalculatorScreen}options={{ title: 'Ethanol Mix Calculator' }} />
       <Stack.Screen name="FindE85"          component={E85FinderScreen}        options={{ title: 'Find E85' }} />
     </Stack.Navigator>
