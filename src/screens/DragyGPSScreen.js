@@ -1,7 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { LinearGradient } from 'expo-linear-gradient';
 import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Alert, Clipboard, Modal, Dimensions } from 'react-native';
 import { bleManager, requestBLEPermissions, DRAGY_PREFIX } from '../services/BLEManager';
 import RunChart from '../components/RunChart';
+import SpeedometerGauge from '../components/SpeedometerGauge';
 import { atob, btoa } from 'react-native-quick-base64';
 import { parseNMEASpeed, parseNMEAVTG, parseFixStatus, parseDragySentence, RunCalculator, splitNMEABuffer } from '../services/DragyGPSService';
 
@@ -364,8 +366,8 @@ setCompletedRun(snap);
 
   return (
     <ScrollView style={styles.container}>
-      <Text style={styles.title}>Dragy GPS</Text>
-      <Text style={styles.subtitle}>Performance Meter</Text>
+      <Text style={styles.title}>GPS Performance</Text>
+      <Text style={styles.subtitle}>Live Speed & Timing</Text>
 
       <View style={styles.statusBar}>
         <View style={[styles.statusDot, { backgroundColor: statusColor[state] }]} />
@@ -398,11 +400,8 @@ setCompletedRun(snap);
             <Text style={styles.fixStatus}>GPS: {gpsStatus}</Text>
           </View>
 
-          <View style={styles.speedCard}>
-            <Text style={styles.speedLabel}>SPEED</Text>
-            <Text style={styles.speedValue}>{speed.toFixed(1)}</Text>
-            <Text style={styles.speedUnit}>mph</Text>
-            <Text style={styles.peakSpeed}>Peak: {peakSpeed.toFixed(1)} mph</Text>
+          <View style={{ alignItems: 'center', marginVertical: 4 }}>
+            <SpeedometerGauge speed={speed} maxSpeed={160} unit="mph" label={`Peak ${peakSpeed.toFixed(1)} mph`} />
           </View>
 
           <View style={styles.card}>
