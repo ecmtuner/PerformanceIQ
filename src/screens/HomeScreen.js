@@ -34,6 +34,13 @@ const CATEGORIES = [
     ],
   },
   {
+    label: 'COMMUNITY',
+    accent: '#ffd740',
+    tools: [
+      { id: 'leaderboard', emoji: '🏆', title: 'Leaderboard',   sub: 'Global run rankings',   screen: 'Leaderboard' },
+    ],
+  },
+  {
     label: 'MY GARAGE',
     accent: '#69f0ae',
     tools: [
