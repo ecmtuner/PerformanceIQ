@@ -1,5 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { LinearGradient } from 'expo-linear-gradient';
+import { Ionicons } from '@expo/vector-icons';
+import { getConnectedCar } from '../services/CarDataStore';
+import { submitRun } from '../services/LeaderboardService';
 import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Alert, Clipboard, Modal, Dimensions } from 'react-native';
 import { bleManager, requestBLEPermissions, DRAGY_PREFIX } from '../services/BLEManager';
 import RunChart from '../components/RunChart';
@@ -84,7 +87,8 @@ function ResultsModal({ run, bracket, onClose }) {
 
   const peakSpeed = Math.max(...samples.map(s => s.speedMph || 0)).toFixed(1);
   const altFt = altSamples && altSamples.length > 0 ? (altSamples[0].altM * 3.28084).toFixed(0) : '—';
-  const t060 = splits.find(s => s.label === '0-60');
+  const tBracket = splits[splits.length - 1]; // final split = full bracket time
+  const car = getConnectedCar();
 
   return (
     <ScrollView style={rm.container}>
@@ -94,11 +98,20 @@ function ResultsModal({ run, bracket, onClose }) {
       </View>
 
       <View style={rm.envBar}>
-        <Text style={rm.envItem}>⬆ {altFt}ft</Text>
-        <Text style={rm.envItem}>📐 {slope}%</Text>
-        <Text style={rm.envItem}>🏁 {peakSpeed} mph</Text>
-        <Text style={rm.envItem}>📏 {distFt}ft</Text>
+        <View style={rm.envCell}><Text style={rm.envVal}>{altFt}ft</Text><Text style={rm.envLbl}>ALTITUDE</Text></View>
+        <View style={rm.envCell}><Text style={rm.envVal}>{slope}%</Text><Text style={rm.envLbl}>SLOPE</Text></View>
+        <View style={rm.envCell}><Text style={rm.envVal}>{peakSpeed}</Text><Text style={rm.envLbl}>PEAK MPH</Text></View>
+        <View style={rm.envCell}><Text style={rm.envVal}>{distFt}ft</Text><Text style={rm.envLbl}>DISTANCE</Text></View>
       </View>
+
+      {/* Car info if OBD2 connected */}
+      {car && (
+        <View style={[rm.card, { borderLeftWidth: 3, borderLeftColor: '#4caf50', marginTop: 0 }]}>
+          <Text style={[rm.chartLabel, { color: '#4caf50' }]}>✅ VEHICLE VERIFIED (OBD2)</Text>
+          <Text style={{ color: '#fff', fontSize: 15, fontWeight: '800' }}>{car.year} {car.make} {car.model}</Text>
+          <Text style={{ color: '#555', fontSize: 12, marginTop: 2 }}>{car.engine}  ·  VIN: {car.vin?.slice(0,8)}...</Text>
+        </View>
+      )}
 
       <View style={rm.card}>
         <Text style={rm.chartLabel}>⚡ SPEED & ACCELERATION</Text>
@@ -106,8 +119,8 @@ function ResultsModal({ run, bracket, onClose }) {
       </View>
 
       <View style={rm.statsRow}>
-        <View style={rm.statBox}><Text style={rm.statVal}>{t060?.raw || '—'}s</Text><Text style={rm.statLbl}>0-60 Raw</Text></View>
-        <View style={rm.statBox}><Text style={[rm.statVal,{color:'#e51515'}]}>{t060?.corr || '—'}s</Text><Text style={rm.statLbl}>0-60 Corrected</Text></View>
+        <View style={rm.statBox}><Text style={[rm.statVal,{color:'#e51515'}]}>{tBracket?.raw || '—'}s</Text><Text style={rm.statLbl}>{bracket?.label || '0-60'}</Text></View>
+        <View style={rm.statBox}><Text style={[rm.statVal,{color:'#ff6b35'}]}>{tBracket?.corr || '—'}s</Text><Text style={rm.statLbl}>Slope Corrected</Text></View>
         <View style={rm.statBox}><Text style={rm.statVal}>{slope}%</Text><Text style={rm.statLbl}>Slope</Text></View>
       </View>
 
@@ -126,6 +139,20 @@ function ResultsModal({ run, bracket, onClose }) {
           </View>
         ))}
       </View>
+      {/* Submit to leaderboard */}
+      <TouchableOpacity
+        style={[rm.card, { alignItems: 'center', borderColor: '#e51515', borderWidth: 1, marginTop: 12 }]}
+        onPress={async () => {
+          const res = await submitRun({
+            bracket, rawTime: tBracket?.raw, correctedTime: tBracket?.corr,
+            slope, distanceFt: distFt, peakSpeed, car: getConnectedCar(),
+          });
+          Alert.alert(res.success ? '🏆 Submitted!' : '❌ Failed', res.success ? 'Your run is on the leaderboard.' : res.error);
+        }}>
+        <Text style={{ color: '#e51515', fontWeight: '800', fontSize: 15, padding: 4 }}>🏆 Submit to Leaderboard</Text>
+        {!getConnectedCar() && <Text style={{ color: '#444', fontSize: 11, marginTop: 2 }}>Connect OBD2 for verified badge</Text>}
+      </TouchableOpacity>
+
       <View style={{ height: 60 }} />
     </ScrollView>
   );
@@ -138,7 +165,9 @@ const rm = StyleSheet.create({
   closeBtn: { padding: 8 },
   closeText: { color: '#e51515', fontSize: 18, fontWeight: '700' },
   envBar: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-around', backgroundColor: '#111', padding: 10, marginHorizontal: 16, borderRadius: 10, marginBottom: 12 },
-  envItem: { color: '#ccc', fontSize: 12, fontWeight: '600', padding: 3 },
+  envCell: { alignItems: 'center', flex: 1 },
+  envVal: { color: '#fff', fontSize: 16, fontWeight: '800' },
+  envLbl: { color: '#444', fontSize: 9, letterSpacing: 1, fontWeight: '600', marginTop: 2 },
   card: { backgroundColor: '#1a1a1a', borderRadius: 12, margin: 16, marginBottom: 0, padding: 14 },
   chartLabel: { color: '#666', fontSize: 10, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 6 },
   statsRow: { flexDirection: 'row', margin: 16, gap: 10 },

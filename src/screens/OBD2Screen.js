@@ -4,6 +4,7 @@ import { bleManager, requestBLEPermissions } from '../services/BLEManager';
 import { PIDS, parseOBD2Response, AT_COMMANDS } from '../services/OBD2Service';
 import { atob, btoa } from 'react-native-quick-base64';
 import RNBluetoothClassic from 'react-native-bluetooth-classic';
+import { setConnectedCar, clearConnectedCar, decodeVIN, parseVINFromOBD2 } from '../services/CarDataStore';
 
 const LIVE_PIDS = [PIDS.RPM, PIDS.SPEED, PIDS.THROTTLE, PIDS.COOLANT_TEMP, PIDS.INTAKE_TEMP, PIDS.MAP, PIDS.SHORT_FUEL, PIDS.LONG_FUEL, PIDS.TIMING_ADV, PIDS.BATTERY];
 const STATES = { IDLE: 'idle', SCANNING: 'scanning', CONNECTING: 'connecting', INITIALIZING: 'initializing', CONNECTED: 'connected', ERROR: 'error' };
@@ -16,6 +17,7 @@ export default function OBD2Screen() {
   const [liveData, setLiveData] = useState({});
   const [log, setLog] = useState([]);
   const [dtcs, setDtcs] = useState([]);
+  const [carInfo, setCarInfo] = useState(null);
 
   // Refs that work for both transports
   const classicDeviceRef = useRef(null);  // BluetoothClassic device
@@ -85,6 +87,7 @@ export default function OBD2Screen() {
     setState(STATES.CONNECTED);
     setConnected(classicDeviceRef.current?.name || 'Classic Device');
     addLog('ELM327 initialized. Live data active.');
+    readVIN();
     startPolling();
   };
 
@@ -166,6 +169,7 @@ export default function OBD2Screen() {
     setState(STATES.CONNECTED);
     setConnected(bleDeviceRef.current?.name || 'BLE Device');
     addLog('ELM327 initialized. Live data active.');
+    readVIN();
     startPolling();
   };
 
@@ -173,6 +177,30 @@ export default function OBD2Screen() {
     try {
       await bleCharRef.current?.writeWithResponse(btoa(cmd));
     } catch (e) { addLog(`Write error: ${e.message}`); }
+  };
+
+  // ─── VIN READING ──────────────────────────────────────────────────────────────
+  const vinLinesRef = useRef([]);
+  const readVIN = async () => {
+    addLog('Reading VIN...');
+    vinLinesRef.current = [];
+    await delay(500);
+    await sendCommand('09 02\r');
+    await delay(2000); // wait for multi-frame response
+    const vin = parseVINFromOBD2(vinLinesRef.current);
+    if (vin) {
+      addLog('VIN: ' + vin + ' - decoding...');
+      const car = await decodeVIN(vin);
+      if (car) {
+        setConnectedCar(car);
+        setCarInfo(car);
+        addLog(`✅ ${car.year} ${car.make} ${car.model} ${car.engine}`);
+      } else {
+        addLog(`VIN ${vin} — decode failed`);
+      }
+    } else {
+      addLog('VIN not available from this adapter');
+    }
   };
 
   // ─── SHARED ──────────────────────────────────────────────────────────────────
@@ -190,6 +218,10 @@ export default function OBD2Screen() {
   };
 
   const processResponse = (line) => {
+    // Capture VIN response lines
+    if (line.startsWith('49') || line.includes('4902')) {
+      vinLinesRef.current.push(line);
+    }
     for (const pid of LIVE_PIDS) {
       const val = parseOBD2Response(line, pid);
       if (val !== null) {
@@ -213,6 +245,8 @@ export default function OBD2Screen() {
     classicDeviceRef.current = null; bleDeviceRef.current = null; bleCharRef.current = null;
     setState(STATES.IDLE); setConnected(null); setLiveData({}); setDevices([]);
     bufferRef.current = '';
+    clearConnectedCar();
+    setCarInfo(null);
     addLog('Disconnected.');
   };
 
@@ -288,7 +322,17 @@ export default function OBD2Screen() {
         </View>
       )}
 
-      {/* Live data grid */}
+      {/* Car identity card */}
+      {carInfo && (
+        <View style={[styles.card, { borderLeftWidth: 3, borderLeftColor: '#4caf50' }]}>
+          <Text style={[styles.sectionTitle, { color: '#4caf50' }]}>✅ Vehicle Verified</Text>
+          <Text style={{ color: '#fff', fontSize: 16, fontWeight: '800' }}>{carInfo.year} {carInfo.make} {carInfo.model}</Text>
+          <Text style={{ color: '#666', fontSize: 12, marginTop: 2 }}>{carInfo.engine}  ·  {carInfo.fuel}</Text>
+          <Text style={{ color: '#333', fontSize: 10, marginTop: 4 }}>VIN: {carInfo.vin}</Text>
+        </View>
+      )}
+
+      {/* Live data grid */}}
       {connected && Object.keys(liveData).length > 0 && (
         <View style={styles.card}>
           <Text style={styles.sectionTitle}>Live Data</Text>
