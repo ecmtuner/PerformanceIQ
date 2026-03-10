@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Alert, Clipboard, Modal, Dimensions } from 'react-native';
 import { bleManager, requestBLEPermissions, DRAGY_PREFIX } from '../services/BLEManager';
+import RunChart from '../components/RunChart';
 import { atob, btoa } from 'react-native-quick-base64';
 import { parseNMEASpeed, parseNMEAVTG, parseFixStatus, parseDragySentence, RunCalculator, splitNMEABuffer } from '../services/DragyGPSService';
 
@@ -10,16 +11,7 @@ const SCREEN_W = Dimensions.get('window').width;
 const SPLITS = [10, 20, 30, 40, 50, 60];
 const slopeCorr = (t, pct) => t ? (t / (1 + pct * 0.015)).toFixed(3) : null;
 
-function SpeedBar({ data }) {
-  if (!data || data.length < 2) return null;
-  const maxS = Math.max(1, ...data.map(d => d.s));
-  const bw = Math.max(1, (SCREEN_W - 48) / data.length);
-  return (
-    <View style={{ height: 130, flexDirection: 'row', alignItems: 'flex-end', backgroundColor: '#0d0d0d', borderRadius: 8, overflow: 'hidden' }}>
-      {data.map((d, i) => <View key={i} style={{ width: bw, height: Math.max(1, (d.s / maxS) * 130), backgroundColor: '#4fc3f7', opacity: 0.4 + 0.6 * (d.s / maxS) }} />)}
-    </View>
-  );
-}
+// SpeedBar replaced by RunChart SVG component
 
 function ResultsModal({ run, onClose }) {
   if (!run || !run.samples || run.samples.length < 2) {
@@ -32,13 +24,7 @@ function ResultsModal({ run, onClose }) {
   }
   const { samples, altSamples } = run;
   const launchTime = samples[0].time;
-  const step = Math.max(1, Math.floor(samples.length / 100));
-
-  // Chart data
-  const chartData = [];
-  for (let i = 0; i < samples.length; i += step) {
-    chartData.push({ s: samples[i].speedMph || 0 });
-  }
+  // Chart rendered by RunChart component using raw samples
 
   // Slope
   let slope = 0;
@@ -93,13 +79,8 @@ function ResultsModal({ run, onClose }) {
       </View>
 
       <View style={rm.card}>
-        <Text style={rm.chartLabel}>⚡ SPEED (mph)</Text>
-        <SpeedBar data={chartData} />
-        <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 4 }}>
-          <Text style={{ color: '#444', fontSize: 9 }}>0s</Text>
-          <Text style={{ color: '#4fc3f7', fontSize: 9 }}>Peak: {peakSpeed} mph</Text>
-          <Text style={{ color: '#444', fontSize: 9 }}>{((samples[samples.length-1].time - launchTime)/1000).toFixed(1)}s</Text>
-        </View>
+        <Text style={rm.chartLabel}>⚡ SPEED & ACCELERATION</Text>
+        <RunChart samples={samples} height={220} />
       </View>
 
       <View style={rm.statsRow}>
