@@ -2,12 +2,12 @@ import { initializeApp, getApps } from 'firebase/app';
 import { getFirestore, collection, addDoc, query, orderBy, limit, where, getDocs, serverTimestamp } from 'firebase/firestore';
 
 const firebaseConfig = {
-  apiKey: "AIzaSyPlaceholderKeyReplaceWithReal",
+  apiKey: "AIzaSyDPVPHddSlF1fNh-69tdxkDHlXhK8HMJNo",
   authDomain: "performanceiq-app.firebaseapp.com",
   projectId: "performanceiq-app",
-  storageBucket: "performanceiq-app.appspot.com",
-  messagingSenderId: "000000000000",
-  appId: "1:000000000000:web:placeholder"
+  storageBucket: "performanceiq-app.firebasestorage.app",
+  messagingSenderId: "1004679127568",
+  appId: "1:1004679127568:web:bb6a3e98a32c980b01a095"
 };
 
 let app, db;
