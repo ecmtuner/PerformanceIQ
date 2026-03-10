@@ -13,7 +13,7 @@ const slopeCorr = (t, pct) => t ? (t / (1 + pct * 0.015)).toFixed(3) : null;
 
 // SpeedBar replaced by RunChart SVG component
 
-function ResultsModal({ run, onClose }) {
+function ResultsModal({ run, bracket, onClose }) {
   if (!run || !run.samples || run.samples.length < 2) {
     return (
       <View style={rm.container}>
@@ -46,18 +46,38 @@ function ResultsModal({ run, onClose }) {
   }
   distFt = parseFloat(distFt.toFixed(1));
 
-  // Splits
-  const splits = SPLITS.map(target => {
+  // Bracket-aware splits
+  const bFrom = bracket?.from ?? 0;
+  const bTo = bracket?.to ?? 60;
+  // Generate split targets: every 10 mph within the bracket range
+  const splitTargets = [];
+  const step10 = Math.ceil((bTo - bFrom) / 6 / 10) * 10 || 10;
+  for (let t = bFrom + step10; t <= bTo; t += step10) splitTargets.push(t);
+  if (splitTargets[splitTargets.length - 1] !== bTo) splitTargets.push(bTo);
+
+  // Find time when a specific speed was reached relative to bracket start
+  const findTimeAt = (targetSpeed, refSpeed) => {
+    // refSpeed = bracket.from (the "start" of this bracket)
+    let refTime = null;
     for (let i = 1; i < samples.length; i++) {
-      if (samples[i].speedMph >= target) {
+      if (refTime === null && samples[i].speedMph >= refSpeed) {
         const s0 = samples[i-1], s1 = samples[i];
-        const frac = (target - s0.speedMph) / ((s1.speedMph - s0.speedMph) || 1);
-        const t = ((s0.time + frac * (s1.time - s0.time)) - launchTime) / 1000;
-        const raw = t.toFixed(3);
-        return { label: `0-${target}`, raw, corr: slopeCorr(parseFloat(raw), slope) };
+        const frac = (refSpeed - s0.speedMph) / ((s1.speedMph - s0.speedMph) || 1);
+        refTime = s0.time + frac * (s1.time - s0.time);
+      }
+      if (refTime !== null && samples[i].speedMph >= targetSpeed) {
+        const s0 = samples[i-1], s1 = samples[i];
+        const frac = (targetSpeed - s0.speedMph) / ((s1.speedMph - s0.speedMph) || 1);
+        const absTime = s0.time + frac * (s1.time - s0.time);
+        return ((absTime - refTime) / 1000).toFixed(3);
       }
     }
-    return { label: `0-${target}`, raw: null, corr: null };
+    return null;
+  };
+
+  const splits = splitTargets.map(target => {
+    const raw = findTimeAt(target, bFrom);
+    return { label: `${bFrom}-${target}`, raw, corr: slopeCorr(parseFloat(raw), slope) };
   });
 
   const peakSpeed = Math.max(...samples.map(s => s.speedMph || 0)).toFixed(1);
@@ -80,7 +100,7 @@ function ResultsModal({ run, onClose }) {
 
       <View style={rm.card}>
         <Text style={rm.chartLabel}>⚡ SPEED & ACCELERATION</Text>
-        <RunChart samples={samples} height={220} />
+        <RunChart samples={samples} height={220} bracket={bracket} />
       </View>
 
       <View style={rm.statsRow}>
@@ -92,7 +112,7 @@ function ResultsModal({ run, onClose }) {
       <View style={rm.card}>
         <Text style={rm.sectionTitle}>Split Times</Text>
         <View style={{ flexDirection: 'row', marginBottom: 8 }}>
-          <Text style={[rm.c1,{color:'#555'}]}>Split</Text>
+          <Text style={[rm.c1,{color:'#555'}]}>Split (mph)</Text>
           <Text style={[rm.c2,{color:'#555'}]}>Raw</Text>
           <Text style={[rm.c3,{color:'#e51515'}]}>Slope Corrected</Text>
         </View>
@@ -409,7 +429,7 @@ setCompletedRun(snap);
 
           {/* Results Modal */}
           <Modal visible={showResults} animationType="slide" onRequestClose={() => setShowResults(false)}>
-            <ResultsModal run={completedRun} onClose={() => setShowResults(false)} />
+            <ResultsModal run={completedRun} bracket={completedRun?.bracket} onClose={() => setShowResults(false)} />
           </Modal>
 
           {Object.keys(times).length > 0 && (

@@ -25,7 +25,7 @@ function closedPath(pts, chartH) {
   return `${open} L ${pts[pts.length-1].x} ${chartH} L ${pts[0].x} ${chartH} Z`;
 }
 
-export default function RunChart({ samples, height = 220 }) {
+export default function RunChart({ samples, height = 220, bracket }) {
   if (!samples || samples.length < 2) return null;
 
   const chartH = height - PAD.top - PAD.bottom;
@@ -113,6 +113,31 @@ export default function RunChart({ samples, height = 220 }) {
         {xTicks.map((t, i) => (
           <SvgText key={i} x={t.x} y={height - 6} fontSize={9} fill="#444" textAnchor="middle">{t.label}</SvgText>
         ))}
+
+        {/* Bracket highlight markers */}
+        {bracket && (() => {
+          const markers = [];
+          [bracket.from, bracket.to].forEach((speed, idx) => {
+            if (speed <= 0) return;
+            // Find time when this speed was reached
+            for (let i = 1; i < samples.length; i++) {
+              if (samples[i].speedMph >= speed) {
+                const s0 = samples[i-1], s1 = samples[i];
+                const frac = (speed - s0.speedMph) / ((s1.speedMph - s0.speedMph) || 1);
+                const t = ((s0.time + frac * (s1.time - s0.time)) - samples[0].time) / 1000;
+                const x = PAD.left + (t / tMax) * CHART_W;
+                markers.push(
+                  <G key={idx}>
+                    <Line x1={x} y1={PAD.top} x2={x} y2={PAD.top + chartH} stroke="#e51515" strokeWidth={1.5} strokeDasharray="4,3" />
+                    <SvgText x={x + 3} y={PAD.top + 10} fontSize={9} fill="#e51515">{speed}mph</SvgText>
+                  </G>
+                );
+                break;
+              }
+            }
+          });
+          return markers;
+        })()}
 
         {/* Y-axis unit */}
         <SvgText x={PAD.left - 2} y={PAD.top - 2} fontSize={9} fill="#4fc3f7" textAnchor="end">mph</SvgText>
