@@ -62,18 +62,21 @@ export default function OBD2Screen() {
       const dev = await RNBluetoothClassic.connectToDevice(device.id);
       classicDeviceRef.current = dev;
 
-      // Listen for incoming data
-      classicSubRef.current = RNBluetoothClassic.onDeviceRead(device.id, (event) => {
-        const chunk = event.data || '';
+      // Use dev.onDataReceived() — avoids address mismatch with module-level onDeviceRead
+      classicSubRef.current = dev.onDataReceived((event) => {
+        const chunk = (event?.data ?? event ?? '').toString();
+        if (!chunk) return;
+        addLog(`RAW: ${chunk.replace(/[\r\n]/g, '↵').substring(0, 60)}`);
         bufferRef.current += chunk;
-        // Check for '>' prompt (may be inline, not on its own line)
+        // Resolve pending response promise on '>' prompt
         if (chunk.includes('>') && responseResolveRef.current) {
           const res = responseResolveRef.current;
           responseResolveRef.current = null;
           res();
         }
-        const lines = bufferRef.current.split('\r');
-        bufferRef.current = lines.pop();
+        // Split on \r or \n (handle both ELM327 line endings)
+        const lines = bufferRef.current.split(/[\r\n]+/);
+        bufferRef.current = lines.pop() ?? '';
         lines.forEach(line => { if (line.trim()) processResponse(line.trim()); });
       });
 
@@ -249,6 +252,12 @@ export default function OBD2Screen() {
     if (line.startsWith('49') || line.includes('4902')) {
       vinLinesRef.current.push(line);
     }
+    // Skip known non-data responses
+    const upper = line.toUpperCase();
+    if (upper === 'OK' || upper.startsWith('AT') || upper === 'ELM327' ||
+        upper.startsWith('SEARCHING') || upper === 'NO DATA' ||
+        upper === 'UNABLE TO CONNECT' || upper === 'BUS INIT' || upper === '>') return;
+
     for (const pid of LIVE_PIDS) {
       const val = parseOBD2Response(line, pid);
       if (val !== null) {
@@ -390,7 +399,7 @@ export default function OBD2Screen() {
       {log.length > 0 && (
         <View style={styles.card}>
           <Text style={styles.sectionTitle}>Log</Text>
-          {log.slice(0, 8).map((l, i) => <Text key={i} style={styles.logLine}>{l}</Text>)}
+          {log.slice(0, 20).map((l, i) => <Text key={i} style={styles.logLine}>{l}</Text>)}
         </View>
       )}
       <View style={{ height: 40 }} />
