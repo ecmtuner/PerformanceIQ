@@ -3,6 +3,8 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { getConnectedCar } from '../services/CarDataStore';
 import { submitRun } from '../services/LeaderboardService';
+import { getCarProfile } from '../utils/storage';
+import { getLocalUser } from '../services/AuthService';
 import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Alert, Clipboard, Modal, Dimensions } from 'react-native';
 import { bleManager, requestBLEPermissions, DRAGY_PREFIX } from '../services/BLEManager';
 import RunChart from '../components/RunChart';
@@ -19,6 +21,16 @@ const slopeCorr = (t, pct) => t ? (t / (1 + pct * 0.015)).toFixed(3) : null;
 // SpeedBar replaced by RunChart SVG component
 
 function ResultsModal({ run, bracket, onClose }) {
+  const [carProfile, setCarProfile] = useState(null);
+  const [profileLoaded, setProfileLoaded] = useState(false);
+  const [localUser, setLocalUser] = useState(null);
+  const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    getCarProfile().then(p => { setCarProfile(p); setProfileLoaded(true); });
+    getLocalUser().then(u => setLocalUser(u));
+  }, []);
+
   if (!run || !run.samples || run.samples.length < 2) {
     return (
       <View style={rm.container}>
@@ -139,19 +151,93 @@ function ResultsModal({ run, bracket, onClose }) {
           </View>
         ))}
       </View>
+
+      {/* Mod List (from car profile) */}
+      {carProfile?.mods?.length > 0 && (
+        <View style={rm.card}>
+          <Text style={rm.sectionTitle}>🔧 Mod List</Text>
+          {carProfile.mods.map((mod, i) => (
+            <View key={i} style={{ flexDirection: 'row', paddingVertical: 5, borderTopWidth: i > 0 ? 1 : 0, borderTopColor: '#111' }}>
+              <Text style={{ color: '#e51515', marginRight: 8 }}>•</Text>
+              <Text style={{ color: '#ccc', fontSize: 13, flex: 1 }}>{mod}</Text>
+            </View>
+          ))}
+        </View>
+      )}
+
       {/* Submit to leaderboard */}
-      <TouchableOpacity
-        style={[rm.card, { alignItems: 'center', borderColor: '#e51515', borderWidth: 1, marginTop: 12 }]}
-        onPress={async () => {
-          const res = await submitRun({
-            bracket, rawTime: tBracket?.raw, correctedTime: tBracket?.corr,
-            slope, distanceFt: distFt, peakSpeed, car: getConnectedCar(),
-          });
-          Alert.alert(res.success ? '🏆 Submitted!' : '❌ Failed', res.success ? 'Your run is on the leaderboard.' : res.error);
-        }}>
-        <Text style={{ color: '#e51515', fontWeight: '800', fontSize: 15, padding: 4 }}>🏆 Submit to Leaderboard</Text>
-        {!getConnectedCar() && <Text style={{ color: '#444', fontSize: 11, marginTop: 2 }}>Connect OBD2 for verified badge</Text>}
-      </TouchableOpacity>
+      {(() => {
+        const obd2Car = getConnectedCar();
+        const hasCar = obd2Car || (carProfile?.make && carProfile?.model && carProfile?.year);
+        const hasAccount = !!localUser;
+        const bracketDone = tBracket?.raw !== null && tBracket?.raw !== undefined;
+        const canSubmit = profileLoaded && hasAccount && hasCar && bracketDone && !submitting;
+
+        return (
+          <TouchableOpacity
+            style={[rm.card, {
+              alignItems: 'center', borderWidth: 1, marginTop: 12,
+              borderColor: canSubmit ? '#e51515' : '#333',
+              opacity: canSubmit ? 1 : 0.6,
+            }]}
+            disabled={!canSubmit}
+            onPress={async () => {
+              if (!hasAccount) {
+                Alert.alert('🔑 Account Required', 'You need to register an account before submitting to the leaderboard.\n\nGo to Car Profile to sign up.');
+                return;
+              }
+              if (!hasCar) {
+                Alert.alert('🚗 Car Required', 'Please fill out your Car Profile (make, model, year) before submitting.');
+                return;
+              }
+              if (!bracketDone) {
+                Alert.alert('🏁 Incomplete Run', `Your car did not complete the full ${bracket?.label || ''} bracket.`);
+                return;
+              }
+              setSubmitting(true);
+              const carData = obd2Car || {
+                make: carProfile.make, model: carProfile.model,
+                year: carProfile.year, engine: carProfile.engine || '',
+                vin: null,
+              };
+              const res = await submitRun({
+                bracket,
+                rawTime: tBracket?.raw,
+                correctedTime: tBracket?.corr,
+                slope,
+                distanceFt: distFt,
+                peakSpeed,
+                car: carData,
+                modList: carProfile?.mods || [],
+                username: localUser?.displayName || localUser?.email || 'Anonymous',
+              });
+              setSubmitting(false);
+              Alert.alert(
+                res.success ? '🏆 Submitted!' : '❌ Failed',
+                res.success ? 'Your run is on the leaderboard.' : res.error
+              );
+            }}>
+            <Text style={{ color: canSubmit ? '#e51515' : '#555', fontWeight: '800', fontSize: 15, padding: 4 }}>
+              {submitting ? '⏳ Submitting...' : '🏆 Submit to Leaderboard'}
+            </Text>
+            {!hasAccount && profileLoaded && (
+              <Text style={{ color: '#e51515', fontSize: 11, marginTop: 2 }}>⚠️ Account required — register in Car Profile</Text>
+            )}
+            {hasAccount && !hasCar && profileLoaded && (
+              <Text style={{ color: '#e51515', fontSize: 11, marginTop: 2 }}>⚠️ Car Profile required (make, model, year)</Text>
+            )}
+            {hasAccount && hasCar && !bracketDone && (
+              <Text style={{ color: '#ff9800', fontSize: 11, marginTop: 2 }}>⚠️ Bracket not completed — run didn't reach {bracket?.to} mph</Text>
+            )}
+            {hasAccount && hasCar && bracketDone && !obd2Car && (
+              <Text style={{ color: '#444', fontSize: 11, marginTop: 2 }}>Connect OBD2 for ✅ VIN verified badge</Text>
+            )}
+            {hasAccount && hasCar && bracketDone && (
+              <Text style={{ color: '#333', fontSize: 11, marginTop: 2 }}>👤 {localUser?.displayName}</Text>
+            )}
+          </TouchableOpacity>
+        );
+      })()}
 
       <View style={{ height: 60 }} />
     </ScrollView>
@@ -378,9 +464,10 @@ export default function DragyGPSScreen() {
       samples: [...calcRef.current.samples],
       altSamples: [...(calcRef.current.altSamples || [])],
       satellites: 12,
+      bracket, // ← store selected bracket so ResultsModal shows correct splits
     };
     if (snap.samples.length > 2) {
-setCompletedRun(snap);
+      setCompletedRun(snap);
     }
     setState(STATES.CONNECTED);
   };

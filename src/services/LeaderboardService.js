@@ -19,7 +19,7 @@ const initFirebase = () => {
   return db;
 };
 
-export const submitRun = async ({ bracket, rawTime, correctedTime, slope, distanceFt, peakSpeed, car, location }) => {
+export const submitRun = async ({ bracket, rawTime, correctedTime, slope, distanceFt, peakSpeed, car, modList, username, location }) => {
   try {
     const db = initFirebase();
     await addDoc(collection(db, 'leaderboard'), {
@@ -36,9 +36,11 @@ export const submitRun = async ({ bracket, rawTime, correctedTime, slope, distan
       carYear: car?.year || '',
       carEngine: car?.engine || '',
       vin: car?.vin || null,
+      modList: Array.isArray(modList) ? modList : [],
+      username: username || 'Anonymous',
       location: location || '',
       timestamp: serverTimestamp(),
-      verified: !!car?.vin, // VIN-verified flag
+      verified: !!car?.vin,
     });
     return { success: true };
   } catch (e) {

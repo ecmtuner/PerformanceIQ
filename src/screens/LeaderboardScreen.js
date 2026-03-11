@@ -108,6 +108,14 @@ export default function LeaderboardScreen() {
               </Text>
               {run.carEngine ? <Text style={s.carEngine}>{run.carEngine}</Text> : null}
 
+              {/* Mod List */}
+              {run.modList?.length > 0 && (
+                <View style={s.modBox}>
+                  <Text style={s.modLabel}>🔧 MODS</Text>
+                  <Text style={s.modText}>{run.modList.join('  ·  ')}</Text>
+                </View>
+              )}
+
               {/* Stats row */}
               <View style={s.statsRow}>
                 <Text style={s.stat}>📐 {run.slope?.toFixed(2) ?? '0'}% slope</Text>
@@ -115,10 +123,13 @@ export default function LeaderboardScreen() {
                 <Text style={s.stat}>📏 {run.distanceFt?.toFixed(0) ?? '—'}ft</Text>
               </View>
 
-              {/* Date */}
-              {run.timestamp?.toDate && (
-                <Text style={s.date}>{run.timestamp.toDate().toLocaleDateString()}</Text>
-              )}
+              {/* Username + Date */}
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 4 }}>
+                {run.username ? <Text style={s.username}>👤 {run.username}</Text> : <View />}
+                {run.timestamp?.toDate && (
+                  <Text style={s.date}>{run.timestamp.toDate().toLocaleDateString()}</Text>
+                )}
+              </View>
             </LinearGradient>
           ))}
           <View style={{ height: 40 }} />
@@ -166,7 +177,12 @@ const s = StyleSheet.create({
   carName: { color: '#fff', fontSize: 14, fontWeight: '800', marginBottom: 2 },
   carEngine: { color: '#555', fontSize: 11, marginBottom: 6 },
 
+  modBox: { backgroundColor: '#0d1a0d', borderRadius: 6, padding: 6, marginBottom: 6 },
+  modLabel: { color: '#2a5a2a', fontSize: 9, fontWeight: '700', letterSpacing: 1, marginBottom: 3 },
+  modText: { color: '#4a8a4a', fontSize: 11, lineHeight: 16 },
+
   statsRow: { flexDirection: 'row', gap: 12, marginTop: 4 },
   stat: { color: '#444', fontSize: 11 },
-  date: { color: '#2a2a2a', fontSize: 10, marginTop: 6, textAlign: 'right' },
+  username: { color: '#2a2a2a', fontSize: 10, marginTop: 4 },
+  date: { color: '#2a2a2a', fontSize: 10, marginTop: 4, textAlign: 'right' },
 });

@@ -23,7 +23,8 @@ export default function OBD2Screen() {
   const classicDeviceRef = useRef(null);  // BluetoothClassic device
   const bleDeviceRef = useRef(null);      // BLE device
   const bleCharRef = useRef(null);        // BLE write characteristic
-  const pollingRef = useRef(null);
+  const pollingRef = useRef(null);       // holds { running: bool }
+  const responseResolveRef = useRef(null); // resolves when '>' prompt received
   const bufferRef = useRef('');
   const classicSubRef = useRef(null);     // Classic data subscription
   const pidIndexRef = useRef(0);
@@ -31,7 +32,7 @@ export default function OBD2Screen() {
   useEffect(() => () => { cleanup(); }, []);
 
   const cleanup = () => {
-    clearInterval(pollingRef.current);
+    if (pollingRef.current) pollingRef.current.running = false;
     classicSubRef.current?.remove();
     classicDeviceRef.current?.disconnect?.();
     bleDeviceRef.current?.cancelConnection?.();
@@ -63,7 +64,14 @@ export default function OBD2Screen() {
 
       // Listen for incoming data
       classicSubRef.current = RNBluetoothClassic.onDeviceRead(device.id, (event) => {
-        bufferRef.current += event.data || '';
+        const chunk = event.data || '';
+        bufferRef.current += chunk;
+        // Check for '>' prompt (may be inline, not on its own line)
+        if (chunk.includes('>') && responseResolveRef.current) {
+          const res = responseResolveRef.current;
+          responseResolveRef.current = null;
+          res();
+        }
         const lines = bufferRef.current.split('\r');
         bufferRef.current = lines.pop();
         lines.forEach(line => { if (line.trim()) processResponse(line.trim()); });
@@ -209,15 +217,34 @@ export default function OBD2Screen() {
   const sendCommand = (cmd) => transport === 'classic' ? writeClassic(cmd) : writeBLE(cmd);
 
   const startPolling = () => {
+    if (pollingRef.current) pollingRef.current.running = false;
+    const handle = { running: true };
+    pollingRef.current = handle;
     pidIndexRef.current = 0;
-    pollingRef.current = setInterval(async () => {
-      const pid = LIVE_PIDS[pidIndexRef.current % LIVE_PIDS.length];
-      pidIndexRef.current++;
-      await sendCommand(pid.cmd);
-    }, 200);
+
+    (async () => {
+      while (handle.running) {
+        const pid = LIVE_PIDS[pidIndexRef.current % LIVE_PIDS.length];
+        pidIndexRef.current++;
+        // Send command and wait for '>' prompt (max 1500ms)
+        await new Promise(resolve => {
+          responseResolveRef.current = resolve;
+          sendCommand(pid.cmd);
+          setTimeout(() => { responseResolveRef.current = null; resolve(); }, 1500);
+        });
+        responseResolveRef.current = null;
+        if (handle.running) await delay(30); // small gap between commands
+      }
+    })();
   };
 
   const processResponse = (line) => {
+    // '>' is the ELM327 prompt — signal that the response is complete
+    if (line.includes('>') && responseResolveRef.current) {
+      const res = responseResolveRef.current;
+      responseResolveRef.current = null;
+      res();
+    }
     // Capture VIN response lines
     if (line.startsWith('49') || line.includes('4902')) {
       vinLinesRef.current.push(line);

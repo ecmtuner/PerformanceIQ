@@ -1,9 +1,11 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { StatusBar } from 'expo-status-bar';
 import { NavigationContainer } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
-import { Text } from 'react-native';
+import { Text, View, ActivityIndicator } from 'react-native';
+import { getLocalUser } from './src/services/AuthService';
+import AuthScreen from './src/screens/AuthScreen';
 
 import HomeScreen from './src/screens/HomeScreen';
 import SlopeCorrectorScreen from './src/screens/SlopeCorrectorScreen';
@@ -50,6 +52,7 @@ function ToolsStack() {
       <Stack.Screen name="ReactionTimer"    component={ReactionTimerScreen}    options={{ title: 'Reaction Timer', headerShown: false }} />
       <Stack.Screen name="RunLogbook"       component={RunLogbookScreen}       options={{ title: 'Run Logbook' }} />
       <Stack.Screen name="TuneNotes"        component={TuneNotesScreen}        options={{ title: 'Tune Notes' }} />
+      <Stack.Screen name="Auth"             component={AuthScreen}             options={{ headerShown: false }} />
       <Stack.Screen name="CarProfile"       component={CarProfileScreen}       options={{ title: 'Car Profile' }} />
       <Stack.Screen name="OBD2"            component={OBD2Screen}           options={{ title: 'OBD2 Scanner' }} />
       <Stack.Screen name="DragyGPS"         component={DragyGPSScreen}       options={{ title: 'GPS Performance Meter' }} />
@@ -62,6 +65,31 @@ function ToolsStack() {
 }
 
 export default function App() {
+  const [authChecked, setAuthChecked] = useState(false);
+  const [user, setUser] = useState(null);
+
+  useEffect(() => {
+    getLocalUser().then(u => { setUser(u); setAuthChecked(true); });
+  }, []);
+
+  if (!authChecked) {
+    return (
+      <View style={{ flex: 1, backgroundColor: '#000', justifyContent: 'center', alignItems: 'center' }}>
+        <ActivityIndicator color="#e51515" size="large" />
+      </View>
+    );
+  }
+
+  // First time — show auth before anything else
+  if (!user) {
+    return (
+      <>
+        <StatusBar style="light" />
+        <AuthScreen onAuthSuccess={(u) => setUser(u)} />
+      </>
+    );
+  }
+
   return (
     <NavigationContainer>
       <StatusBar style="light" />
