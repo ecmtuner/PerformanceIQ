@@ -40,6 +40,16 @@ const hdrOpts = {
   contentStyle: { backgroundColor: '#0a0a0a' },
 };
 
+function RaceRoomStack() {
+  return (
+    <Stack.Navigator screenOptions={hdrOpts}>
+      <Stack.Screen name="RaceRoomLobby"  component={RaceRoomLobbyScreen}  options={{ headerShown: false }} />
+      <Stack.Screen name="RaceRoomWait"   component={RaceRoomWaitScreen}   options={{ title: 'Race Room', headerBackVisible: false }} />
+      <Stack.Screen name="RaceCountdown"  component={RaceCountdownScreen}  options={{ headerShown: false }} />
+    </Stack.Navigator>
+  );
+}
+
 function ToolsStack() {
   return (
     <Stack.Navigator screenOptions={hdrOpts}>
@@ -108,7 +118,7 @@ export default function App() {
       }}>
         <Tab.Screen name="Tools" component={ToolsStack}
           options={{ tabBarIcon: ({ focused }) => <Text style={{ fontSize: 20, opacity: focused ? 1 : 0.4 }}>🏎️</Text> }} />
-        <Tab.Screen name="Race Room" component={RaceRoomLobbyScreen}
+        <Tab.Screen name="Race Room" component={RaceRoomStack}
           options={{ tabBarIcon: ({ focused }) => <Text style={{ fontSize: 20, opacity: focused ? 1 : 0.4 }}>🏁</Text>,
             headerShown: false }} />
         <Tab.Screen name="E85 Calc" component={EthanolCalculatorScreen}
