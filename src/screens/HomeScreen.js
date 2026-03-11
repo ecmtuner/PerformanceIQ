@@ -1,6 +1,7 @@
-import React from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, ScrollView, StatusBar, Platform } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, TouchableOpacity, StyleSheet, ScrollView, StatusBar, Platform, Alert } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import { getLocalUser, signOut } from '../services/AuthService';
 
 const CATEGORIES = [
   {
@@ -53,6 +54,20 @@ const CATEGORIES = [
 ];
 
 export default function HomeScreen({ navigation }) {
+  const [username, setUsername] = useState('');
+  useEffect(() => { getLocalUser().then(u => setUsername(u?.username || u?.email || '')); }, []);
+
+  const handleLogout = () => {
+    Alert.alert('Sign Out', 'Are you sure you want to sign out?', [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Sign Out', style: 'destructive', onPress: async () => {
+        await signOut();
+        // Reload app by navigating — App.js will detect no user and show AuthScreen
+        navigation.reset({ index: 0, routes: [{ name: 'Home' }] });
+      }},
+    ]);
+  };
+
   return (
     <View style={styles.root}>
       <StatusBar barStyle="light-content" backgroundColor="#000" />
@@ -60,10 +75,19 @@ export default function HomeScreen({ navigation }) {
 
         {/* Header */}
         <View style={styles.header}>
-          <Text style={styles.wordmark}>
-            <Text style={styles.wordmarkRed}>Performance</Text>IQ
-          </Text>
-          <Text style={styles.tagline}>RACE  ·  TUNE  ·  DOMINATE</Text>
+          <View style={styles.headerRow}>
+            <View>
+              <Text style={styles.wordmark}>
+                <Text style={styles.wordmarkRed}>Performance</Text>IQ
+              </Text>
+              <Text style={styles.tagline}>RACE  ·  TUNE  ·  DOMINATE</Text>
+            </View>
+            <TouchableOpacity style={styles.profileBtn} onPress={handleLogout}>
+              <Text style={styles.profileEmoji}>👤</Text>
+              <Text style={styles.profileName} numberOfLines={1}>{username}</Text>
+              <Text style={styles.logoutHint}>Sign out</Text>
+            </TouchableOpacity>
+          </View>
         </View>
 
         {/* Categories */}
@@ -115,6 +139,11 @@ const styles = StyleSheet.create({
   content: { paddingHorizontal: 16, paddingTop: Platform.OS === 'android' ? 24 : 12 },
 
   header: { marginBottom: 32 },
+  headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
+  profileBtn: { alignItems: 'center', backgroundColor: '#111', borderRadius: 12, padding: 10, borderWidth: 1, borderColor: '#1e1e1e', minWidth: 70 },
+  profileEmoji: { fontSize: 20 },
+  profileName: { color: '#aaa', fontSize: 10, fontWeight: '700', marginTop: 2, maxWidth: 70 },
+  logoutHint: { color: '#e51515', fontSize: 9, fontWeight: '700', marginTop: 2 },
   wordmark: { color: '#fff', fontSize: 38, fontWeight: '900', letterSpacing: -1.5 },
   wordmarkRed: { color: '#e51515' },
   tagline: { color: '#2a2a2a', fontSize: 10, letterSpacing: 4, fontWeight: '700', marginTop: 4 },

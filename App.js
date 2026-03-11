@@ -46,6 +46,7 @@ function RaceRoomStack() {
       <Stack.Screen name="RaceRoomLobby"  component={RaceRoomLobbyScreen}  options={{ headerShown: false }} />
       <Stack.Screen name="RaceRoomWait"   component={RaceRoomWaitScreen}   options={{ title: 'Race Room', headerBackVisible: false }} />
       <Stack.Screen name="RaceCountdown"  component={RaceCountdownScreen}  options={{ headerShown: false }} />
+      <Stack.Screen name="CarProfile"     component={CarProfileScreen}     options={{ title: 'Car Profile' }} />
     </Stack.Navigator>
   );
 }

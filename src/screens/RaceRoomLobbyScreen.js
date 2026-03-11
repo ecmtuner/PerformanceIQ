@@ -20,18 +20,21 @@ export default function RaceRoomLobbyScreen({ navigation }) {
     getCarProfile().then(c => setCar(c));
   }, []);
 
-  const carLabel = car?.make ? `${car.year || ''} ${car.make} ${car.model}`.trim() : 'No car set';
+  const carLabel = car?.make
+    ? `${car.year || ''} ${car.make} ${car.model || ''}`.trim()
+    : null;
 
   const handleCreate = async () => {
     if (!user) { Alert.alert('Sign In Required', 'Please sign in to create a race room.'); return; }
     setLoading(true);
     try {
+      const label = carLabel || 'Unknown Car';
       const roomCode = await createRoom({
         uid: user.uid,
         username: user.username || user.email,
-        car: carLabel,
+        car: label,
       });
-      navigation.replace('RaceRoomWait', { roomCode, role: 'r1', user, carLabel });
+      navigation.replace('RaceRoomWait', { roomCode, role: 'r1', user, carLabel: label });
     } catch (e) {
       Alert.alert('Error', e.message);
     } finally {
@@ -46,13 +49,14 @@ export default function RaceRoomLobbyScreen({ navigation }) {
     if (!user) { Alert.alert('Sign In Required', 'Please sign in to join a race.'); return; }
     setLoading(true);
     try {
+      const label = carLabel || 'Unknown Car';
       const result = await joinRoom({
         roomCode: joinCode.trim().toUpperCase(),
         uid: user.uid,
         username: user.username || user.email,
-        car: carLabel,
+        car: label,
       });
-      navigation.replace('RaceRoomWait', { roomCode: result.roomCode, role: 'r2', user, carLabel });
+      navigation.replace('RaceRoomWait', { roomCode: result.roomCode, role: 'r2', user, carLabel: label });
     } catch (e) {
       Alert.alert('Cannot Join', e.message);
     } finally {
@@ -74,12 +78,10 @@ export default function RaceRoomLobbyScreen({ navigation }) {
           <Text style={s.label}>RACING AS</Text>
           <Text style={s.value}>{user?.username || user?.email || 'Not signed in'}</Text>
           <Text style={s.label} style={{ marginTop: 8 }}>CAR</Text>
-          <Text style={s.value}>{carLabel}</Text>
-          {!car?.make && (
-            <TouchableOpacity onPress={() => navigation.navigate('CarProfile')} style={s.setCarBtn}>
-              <Text style={s.setCarTxt}>⚙️ Set Car Profile</Text>
-            </TouchableOpacity>
-          )}
+          <Text style={s.value}>{carLabel || 'No car set'}</Text>
+          <TouchableOpacity onPress={() => navigation.navigate('CarProfile')} style={s.setCarBtn}>
+            <Text style={s.setCarTxt}>{carLabel ? '✏️ Edit Car Profile' : '⚙️ Set Car Profile'}</Text>
+          </TouchableOpacity>
         </View>
 
         {/* Mode selection */}
