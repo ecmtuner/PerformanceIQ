@@ -3,6 +3,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { getConnectedCar } from '../services/CarDataStore';
 import { submitRun } from '../services/LeaderboardService';
+import { LiveSpeedStore } from '../services/LiveSpeedStore';
 import { getCarProfile } from '../utils/storage';
 import { getLocalUser } from '../services/AuthService';
 import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Alert, Clipboard, Modal, Dimensions } from 'react-native';
@@ -410,7 +411,9 @@ export default function DragyGPSScreen() {
       updateRef.current = setInterval(() => {
         const calc = calcRef.current;
         const raw = calc.getCurrentSpeed();
-        setSpeed(parseFloat((raw < 0.5 ? 0 : raw).toFixed(1)));
+        const displaySpeed = parseFloat((raw < 0.5 ? 0 : raw).toFixed(1));
+        setSpeed(displaySpeed);
+        LiveSpeedStore.update(displaySpeed);
         setPeakSpeed(parseFloat(calc.getPeakSpeed().toFixed(1)));
         if (bracket.from === 0) {
           const t = calc.getTimeAt(bracket.to);

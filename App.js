@@ -26,6 +26,9 @@ import DragyGPSScreen from './src/screens/DragyGPSScreen';
 import DragyResultsScreen from './src/screens/DragyResultsScreen';
 import LeaderboardScreen from './src/screens/LeaderboardScreen';
 import E85FinderScreen from './src/screens/E85FinderScreen';
+import RaceRoomLobbyScreen from './src/screens/RaceRoomLobbyScreen';
+import RaceRoomWaitScreen from './src/screens/RaceRoomWaitScreen';
+import RaceCountdownScreen from './src/screens/RaceCountdownScreen';
 
 const Tab = createBottomTabNavigator();
 const Stack = createNativeStackNavigator();
@@ -60,6 +63,9 @@ function ToolsStack() {
       <Stack.Screen name="Leaderboard"       component={LeaderboardScreen}    options={{ title: 'Leaderboard', headerShown: false }} />
       <Stack.Screen name="EthanolCalc"      component={EthanolCalculatorScreen}options={{ title: 'Ethanol Mix Calculator' }} />
       <Stack.Screen name="FindE85"          component={E85FinderScreen}        options={{ title: 'Find E85' }} />
+      <Stack.Screen name="RaceRoomLobby"    component={RaceRoomLobbyScreen}    options={{ headerShown: false }} />
+      <Stack.Screen name="RaceRoomWait"     component={RaceRoomWaitScreen}     options={{ title: 'Race Room', headerBackVisible: false }} />
+      <Stack.Screen name="RaceCountdown"    component={RaceCountdownScreen}    options={{ headerShown: false }} />
     </Stack.Navigator>
   );
 }
@@ -102,6 +108,9 @@ export default function App() {
       }}>
         <Tab.Screen name="Tools" component={ToolsStack}
           options={{ tabBarIcon: ({ focused }) => <Text style={{ fontSize: 20, opacity: focused ? 1 : 0.4 }}>🏎️</Text> }} />
+        <Tab.Screen name="Race Room" component={RaceRoomLobbyScreen}
+          options={{ tabBarIcon: ({ focused }) => <Text style={{ fontSize: 20, opacity: focused ? 1 : 0.4 }}>🏁</Text>,
+            headerShown: false }} />
         <Tab.Screen name="E85 Calc" component={EthanolCalculatorScreen}
           options={{ tabBarIcon: ({ focused }) => <Text style={{ fontSize: 20, opacity: focused ? 1 : 0.4 }}>⛽</Text>,
             headerShown: true, headerStyle: { backgroundColor: '#0a0a0a' }, headerTitleStyle: { color: '#fff' } }} />
