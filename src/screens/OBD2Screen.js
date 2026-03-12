@@ -97,8 +97,9 @@ export default function OBD2Screen() {
     }
     setState(STATES.CONNECTED);
     setConnected(classicDeviceRef.current?.name || 'Classic Device');
-    addLog('ELM327 initialized. Live data active.');
-    readVIN();
+    addLog('ELM327 initialized. Reading VIN...');
+    await readVIN();   // finish VIN before starting live polling
+    addLog('Starting live data...');
     startPolling();
   };
 
@@ -156,7 +157,12 @@ export default function OBD2Screen() {
         notifyChar.monitor((err, char) => {
           if (err || !char?.value) return;
           const chunk = atob(char.value);
-          addLog(`RAW: ${chunk.replace(/[\r\n>]/g, '↵').substring(0, 60)}`);
+          // Always log raw during VIN capture so we can debug what the adapter sends
+          if (vinCaptureRef.current) {
+            addLog(`VIN RAW: ${chunk.replace(/[\r\n]/g, '↵').substring(0, 80)}`);
+          } else {
+            addLog(`RAW: ${chunk.replace(/[\r\n>]/g, '↵').substring(0, 60)}`);
+          }
           bufferRef.current += chunk;
           // Resolve pending command when '>' prompt received (may not have \r after it)
           if (bufferRef.current.includes('>') && responseResolveRef.current) {
@@ -188,8 +194,9 @@ export default function OBD2Screen() {
     }
     setState(STATES.CONNECTED);
     setConnected(bleDeviceRef.current?.name || 'BLE Device');
-    addLog('ELM327 initialized. Live data active.');
-    readVIN();
+    addLog('ELM327 initialized. Reading VIN...');
+    await readVIN();   // finish VIN before starting live polling
+    addLog('Starting live data...');
     startPolling();
   };
 
