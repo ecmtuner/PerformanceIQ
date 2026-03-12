@@ -1,13 +1,14 @@
 import { btoa, atob } from 'react-native-quick-base64';
 
-// ELM327 AT Commands
+// ELM327 AT Commands — init sequence (order matters)
 export const AT_COMMANDS = {
-  RESET: 'ATZ\r',
-  ECHO_OFF: 'ATE0\r',
-  LINEFEED_OFF: 'ATL0\r',
-  AUTO_PROTOCOL: 'ATSP0\r',
-  HEADERS_OFF: 'ATH0\r',
-  ADAPTIVE_TIMING: 'ATAT1\r',
+  RESET:           'ATZ\r',    // full reset — wait 1500ms after this
+  ECHO_OFF:        'ATE0\r',   // suppress command echo
+  LINEFEED_OFF:    'ATL0\r',   // no extra linefeeds
+  SPACES_OFF:      'ATS0\r',   // remove spaces from response bytes (cleaner parsing)
+  HEADERS_OFF:     'ATH0\r',   // headers off for live PID polling (toggled ON for VIN)
+  ADAPTIVE_TIMING: 'ATAT2\r',  // ATAT2 = aggressive adaptive timing (faster than ATAT1)
+  AUTO_PROTOCOL:   'ATSP0\r',  // auto-detect protocol last (after other settings)
 };
 
 // OBD2 PIDs

@@ -205,26 +205,53 @@ export default function OBD2Screen() {
 
   // ─── VIN READING ──────────────────────────────────────────────────────────────
   const vinLinesRef = useRef([]);
+  const vinCaptureRef = useRef(false); // true while actively collecting VIN response
+
   const readVIN = async () => {
     addLog('Reading VIN...');
     vinLinesRef.current = [];
-    await delay(500);
-    await sendCommand('09 02\r');
-    await delay(2000); // wait for multi-frame response
-    const vin = parseVINFromOBD2(vinLinesRef.current);
-    if (vin) {
-      addLog('VIN: ' + vin + ' - decoding...');
-      const car = await decodeVIN(vin);
-      if (car) {
-        setConnectedCar(car);
-        setCarInfo(car);
-        addLog(`✅ ${car.year} ${car.make} ${car.model} ${car.engine}`);
-      } else {
-        addLog(`VIN ${vin} — decode failed`);
+
+    // Step 1: Switch to headers ON so we can sequence multi-frame ISO-TP response
+    await sendCommand('ATH1\r');
+    await delay(300);
+
+    // Step 2: Try up to 3 times — some adapters need a retry
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      vinLinesRef.current = [];
+      vinCaptureRef.current = true;
+      addLog(`VIN attempt ${attempt}/3...`);
+
+      // Send 0902 (no space — most reliable across ELM327 chips)
+      await sendCommand('0902\r');
+
+      // Wait for multi-frame response to complete (up to 3s)
+      await delay(3000);
+      vinCaptureRef.current = false;
+
+      const vin = parseVINFromOBD2(vinLinesRef.current);
+      if (vin) {
+        addLog(`VIN: ${vin} — decoding...`);
+        // Step 3: Restore headers off for live data polling
+        await sendCommand('ATH0\r');
+        await delay(200);
+        const car = await decodeVIN(vin);
+        if (car) {
+          setConnectedCar(car);
+          setCarInfo(car);
+          addLog(`✅ ${car.year} ${car.make} ${car.model} ${car.engine}`);
+        } else {
+          addLog(`VIN ${vin} — NHTSA decode failed`);
+        }
+        return;
       }
-    } else {
-      addLog('VIN not available from this adapter');
+      addLog(`Attempt ${attempt} — no VIN data yet (lines: ${vinLinesRef.current.length})`);
+      await delay(500);
     }
+
+    // Step 3: Restore headers off regardless of outcome
+    await sendCommand('ATH0\r');
+    await delay(200);
+    addLog('VIN not available from this adapter');
   };
 
   // ─── SHARED ──────────────────────────────────────────────────────────────────
@@ -261,10 +288,23 @@ export default function OBD2Screen() {
       responseResolveRef.current = null;
       res();
     }
-    // Capture VIN response lines
-    if (line.startsWith('49') || line.includes('4902')) {
-      vinLinesRef.current.push(line);
+
+    // Capture ALL lines while VIN capture is active — don't filter by prefix here,
+    // the parser handles extraction. This catches headers-on ISO-TP frames too.
+    if (vinCaptureRef.current) {
+      const upper = line.toUpperCase().replace(/\s/g, '');
+      // Only capture lines that contain hex data (not echo/prompt/OK)
+      if (upper.length > 0 &&
+          upper !== 'OK' && upper !== '>' &&
+          !upper.startsWith('ATH') &&
+          !upper.startsWith('0902') &&      // skip echo of our own command
+          /[0-9A-F]{4,}/.test(upper)) {
+        vinLinesRef.current.push(line);
+        addLog(`VIN frame: ${line.substring(0, 50)}`);
+      }
+      return; // don't try to parse as live PID during VIN read
     }
+
     // Skip known non-data responses
     const upper = line.toUpperCase();
     if (upper === 'OK' || upper.startsWith('AT') || upper === 'ELM327' ||
