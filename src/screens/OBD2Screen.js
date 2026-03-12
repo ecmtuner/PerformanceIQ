@@ -142,14 +142,36 @@ export default function OBD2Screen() {
       bleDeviceRef.current = d;
 
       const services = await d.services();
-      let writeChar = null, notifyChar = null;
+      addLog(`Services found: ${services.length}`);
+
+      // Log all services + characteristics for debugging
+      const allChars = [];
       for (const svc of services) {
         const chars = await svc.characteristics();
-        for (const c of chars) {
-          if ((c.isWritableWithResponse || c.isWritableWithoutResponse) && !writeChar) writeChar = c;
-          if ((c.isNotifiable || c.isIndicatable) && !notifyChar) notifyChar = c;
-        }
+        addLog(`SVC: ${svc.uuid.substring(0,8)} → ${chars.length} chars`);
+        chars.forEach(c => {
+          addLog(`  CHAR: ${c.uuid.substring(0,8)} W:${c.isWritableWithResponse||c.isWritableWithoutResponse} N:${c.isNotifiable||c.isIndicatable}`);
+          allChars.push(c);
+        });
       }
+
+      // Known ELM327 BLE service/characteristic UUIDs (priority order)
+      // Veepeak BLE+, Vgate iCar Pro, OBDLink CX all use FFF0/FFF1/FFF2
+      const KNOWN_WRITE_UUIDS  = ['fff2','fff1','ffe1','0000fff2','0000fff1','0000ffe1'];
+      const KNOWN_NOTIFY_UUIDS = ['fff1','ffe1','0000fff1','0000ffe1'];
+
+      const normalize = (uuid) => uuid.toLowerCase().replace(/-/g,'').replace(/^0+/,'').substring(0,8);
+
+      let writeChar  = allChars.find(c => KNOWN_WRITE_UUIDS.includes(normalize(c.uuid)) && (c.isWritableWithResponse || c.isWritableWithoutResponse));
+      let notifyChar = allChars.find(c => KNOWN_NOTIFY_UUIDS.includes(normalize(c.uuid)) && (c.isNotifiable || c.isIndicatable));
+
+      // Fallback: grab first writable + first notifiable if known UUIDs not found
+      if (!writeChar)  writeChar  = allChars.find(c => c.isWritableWithResponse || c.isWritableWithoutResponse);
+      if (!notifyChar) notifyChar = allChars.find(c => c.isNotifiable || c.isIndicatable);
+
+      addLog(`Write char: ${writeChar?.uuid?.substring(0,8) || 'NONE'}`);
+      addLog(`Notify char: ${notifyChar?.uuid?.substring(0,8) || 'NONE'}`);
+
       if (!writeChar) throw new Error('No writable characteristic found');
       bleCharRef.current = writeChar;
 
