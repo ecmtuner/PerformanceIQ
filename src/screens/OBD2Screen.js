@@ -91,9 +91,9 @@ export default function OBD2Screen() {
 
   const initELM327Classic = async () => {
     bufferRef.current = '';
-    for (const cmd of Object.values(AT_COMMANDS)) {
+    for (const [key, cmd] of Object.entries(AT_COMMANDS)) {
       await writeClassic(cmd);
-      await delay(300);
+      await delay(key === 'RESET' ? 1500 : 300);
     }
     setState(STATES.CONNECTED);
     setConnected(classicDeviceRef.current?.name || 'Classic Device');
@@ -155,9 +155,18 @@ export default function OBD2Screen() {
       if (notifyChar) {
         notifyChar.monitor((err, char) => {
           if (err || !char?.value) return;
-          bufferRef.current += atob(char.value);
-          const lines = bufferRef.current.split('\r');
-          bufferRef.current = lines.pop();
+          const chunk = atob(char.value);
+          addLog(`RAW: ${chunk.replace(/[\r\n>]/g, '↵').substring(0, 60)}`);
+          bufferRef.current += chunk;
+          // Resolve pending command when '>' prompt received (may not have \r after it)
+          if (bufferRef.current.includes('>') && responseResolveRef.current) {
+            const res = responseResolveRef.current;
+            responseResolveRef.current = null;
+            bufferRef.current = bufferRef.current.replace(/>/g, '');
+            res();
+          }
+          const lines = bufferRef.current.split(/[\r\n]+/);
+          bufferRef.current = lines.pop() ?? '';
           lines.forEach(line => { if (line.trim()) processResponse(line.trim()); });
         });
       }
@@ -173,9 +182,9 @@ export default function OBD2Screen() {
 
   const initELM327BLE = async () => {
     bufferRef.current = '';
-    for (const cmd of Object.values(AT_COMMANDS)) {
+    for (const [key, cmd] of Object.entries(AT_COMMANDS)) {
       await writeBLE(cmd);
-      await delay(300);
+      await delay(key === 'RESET' ? 1500 : 300);
     }
     setState(STATES.CONNECTED);
     setConnected(bleDeviceRef.current?.name || 'BLE Device');
@@ -186,7 +195,11 @@ export default function OBD2Screen() {
 
   const writeBLE = async (cmd) => {
     try {
-      await bleCharRef.current?.writeWithResponse(btoa(cmd));
+      if (bleCharRef.current?.isWritableWithoutResponse) {
+        await bleCharRef.current.writeWithoutResponse(btoa(cmd));
+      } else {
+        await bleCharRef.current?.writeWithResponse(btoa(cmd));
+      }
     } catch (e) { addLog(`Write error: ${e.message}`); }
   };
 
