@@ -157,17 +157,21 @@ export default function OBD2Screen() {
 
       // Known ELM327 BLE service/characteristic UUIDs (priority order)
       // Veepeak BLE+, Vgate iCar Pro, OBDLink CX all use FFF0/FFF1/FFF2
-      const KNOWN_WRITE_UUIDS  = ['fff2','fff1','ffe1','0000fff2','0000fff1','0000ffe1'];
-      const KNOWN_NOTIFY_UUIDS = ['fff1','ffe1','0000fff1','0000ffe1'];
+      // Note: 00002a05 (Service Changed) must be excluded — it's a BLE housekeeping char
+      const KNOWN_WRITE_UUIDS  = ['fff2','ffe2','0000fff2','0000ffe2'];
+      const KNOWN_NOTIFY_UUIDS = ['fff1','ffe1','6487','0000fff1','0000ffe1','00006487'];
+
+      // Generic BLE chars to NEVER use as data channel
+      const BLACKLIST_UUIDS = ['2a05','2a00','2a01','2a04','2a23','2a24','2b2a','00002a05','00002a00'];
 
       const normalize = (uuid) => uuid.toLowerCase().replace(/-/g,'').replace(/^0+/,'').substring(0,8);
 
       let writeChar  = allChars.find(c => KNOWN_WRITE_UUIDS.includes(normalize(c.uuid)) && (c.isWritableWithResponse || c.isWritableWithoutResponse));
       let notifyChar = allChars.find(c => KNOWN_NOTIFY_UUIDS.includes(normalize(c.uuid)) && (c.isNotifiable || c.isIndicatable));
 
-      // Fallback: grab first writable + first notifiable if known UUIDs not found
-      if (!writeChar)  writeChar  = allChars.find(c => c.isWritableWithResponse || c.isWritableWithoutResponse);
-      if (!notifyChar) notifyChar = allChars.find(c => c.isNotifiable || c.isIndicatable);
+      // Fallback: first writable/notifiable that isn't a blacklisted BLE generic char
+      if (!writeChar)  writeChar  = allChars.find(c => !BLACKLIST_UUIDS.includes(normalize(c.uuid)) && (c.isWritableWithResponse || c.isWritableWithoutResponse));
+      if (!notifyChar) notifyChar = allChars.find(c => !BLACKLIST_UUIDS.includes(normalize(c.uuid)) && (c.isNotifiable || c.isIndicatable));
 
       addLog(`Write char: ${writeChar?.uuid?.substring(0,8) || 'NONE'}`);
       addLog(`Notify char: ${notifyChar?.uuid?.substring(0,8) || 'NONE'}`);
