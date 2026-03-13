@@ -397,7 +397,6 @@ export default function OBD2Screen() {
     }
 
     // Skip known non-data responses
-    const upper = line.toUpperCase();
     if (upper === 'OK' || upper.startsWith('AT') || upper === 'ELM327' ||
         upper.startsWith('SEARCHING') || upper === 'NO DATA' ||
         upper === 'UNABLE TO CONNECT' || upper === 'BUS INIT' || upper === '>') return;
