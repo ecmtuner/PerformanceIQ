@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Alert, Clipboard } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Alert, Clipboard, TextInput } from 'react-native';
 import { bleManager, requestBLEPermissions } from '../services/BLEManager';
 import { PIDS, parseOBD2Response, AT_COMMANDS } from '../services/OBD2Service';
 import { atob, btoa } from 'react-native-quick-base64';
@@ -19,6 +19,12 @@ export default function OBD2Screen() {
   const [dtcs, setDtcs] = useState([]);
   const [carInfo, setCarInfo] = useState(null);
 
+  // Manual car entry state
+  const [manualYear, setManualYear] = useState('');
+  const [manualMake, setManualMake] = useState('');
+  const [manualModel, setManualModel] = useState('');
+  const [manualEngine, setManualEngine] = useState('');
+
   // Refs that work for both transports
   const classicDeviceRef = useRef(null);  // BluetoothClassic device
   const bleDeviceRef = useRef(null);      // BLE device
@@ -29,7 +35,11 @@ export default function OBD2Screen() {
   const classicSubRef = useRef(null);     // Classic data subscription
   const pidIndexRef = useRef(0);
 
-  useEffect(() => () => { cleanup(); }, []);
+  // Fix stale closure on processResponse
+  const processResponseRef = useRef(null);
+
+  // Change 5: Keep connection alive on navigate away — only stop scanning on unmount
+  useEffect(() => () => { bleManager.stopDeviceScan(); }, []);
 
   const cleanup = () => {
     if (pollingRef.current) pollingRef.current.running = false;
@@ -39,7 +49,8 @@ export default function OBD2Screen() {
     bleManager.stopDeviceScan();
   };
 
-  const addLog = (msg) => setLog(l => [`${new Date().toLocaleTimeString()}: ${msg}`, ...l.slice(0, 50)]);
+  // Change 4: increase buffer to 200
+  const addLog = (msg) => setLog(l => [`${new Date().toLocaleTimeString()}: ${msg}`, ...l.slice(0, 199)]);
 
   // ─── CLASSIC BLUETOOTH ───────────────────────────────────────────────────────
   const loadPairedDevices = async () => {
@@ -77,7 +88,8 @@ export default function OBD2Screen() {
         // Split on \r or \n (handle both ELM327 line endings)
         const lines = bufferRef.current.split(/[\r\n]+/);
         bufferRef.current = lines.pop() ?? '';
-        lines.forEach(line => { if (line.trim()) processResponse(line.trim()); });
+        // Change 3: use ref to avoid stale closure
+        lines.forEach(line => { if (line.trim()) processResponseRef.current?.(line.trim()); });
       });
 
       setState(STATES.INITIALIZING);
@@ -220,7 +232,8 @@ export default function OBD2Screen() {
           }
           const lines = bufferRef.current.split(/[\r\n]+/);
           bufferRef.current = lines.pop() ?? '';
-          lines.forEach(line => { if (line.trim()) processResponse(line.trim()); });
+          // Change 3: use ref to avoid stale closure
+          lines.forEach(line => { if (line.trim()) processResponseRef.current?.(line.trim()); });
         });
       }
 
@@ -274,6 +287,8 @@ export default function OBD2Screen() {
   // ─── VIN READING ──────────────────────────────────────────────────────────────
   const vinLinesRef = useRef([]);
   const vinCaptureRef = useRef(false); // true while actively collecting VIN response
+  // Change 1: abort VIN early on SEARCHING/STOPPED
+  const vinAbortRef = useRef(false);
 
   const readVIN = async () => {
     addLog('Reading VIN...');
@@ -282,13 +297,24 @@ export default function OBD2Screen() {
     for (let attempt = 1; attempt <= 3; attempt++) {
       vinLinesRef.current = [];
       vinCaptureRef.current = true;
+      vinAbortRef.current = false;
       addLog(`VIN attempt ${attempt}/3...`);
 
       // 0902 — Mode 09 PID 02 (VIN), no space for max compatibility
       await sendCommand('0902\r');
 
-      // Wait up to 4s for multi-frame response
-      await delay(4000);
+      // Change 1: Poll every 100ms instead of flat 4000ms delay — abort early on SEARCHING/STOPPED
+      const maxWaitMs = 4000;
+      const pollIntervalMs = 100;
+      let elapsed = 0;
+      while (elapsed < maxWaitMs) {
+        await delay(pollIntervalMs);
+        elapsed += pollIntervalMs;
+        if (vinAbortRef.current) {
+          addLog(`VIN aborted early (SEARCHING/STOPPED) after ${elapsed}ms`);
+          break;
+        }
+      }
       vinCaptureRef.current = false;
 
       addLog(`VIN lines captured: ${vinLinesRef.current.length}`);
@@ -307,6 +333,13 @@ export default function OBD2Screen() {
         }
         return;
       }
+
+      // If aborted (Euro car with no VIN support), don't bother retrying
+      if (vinAbortRef.current) {
+        addLog('VIN not supported by this vehicle — skipping retries');
+        return;
+      }
+
       await delay(500);
     }
     addLog('VIN not available from this adapter');
@@ -351,6 +384,10 @@ export default function OBD2Screen() {
     // the parser handles extraction. This catches headers-on ISO-TP frames too.
     if (vinCaptureRef.current) {
       const upper = line.toUpperCase().replace(/\s/g, '');
+      // Change 1: detect SEARCHING/STOPPED immediately and abort VIN wait
+      if (upper.includes('SEARCHING') || upper.includes('STOPPED')) {
+        vinAbortRef.current = true;
+      }
       // Only capture lines that contain hex data (not echo/prompt/OK)
       if (upper.length > 0 &&
           upper !== 'OK' && upper !== '>' &&
@@ -401,6 +438,9 @@ export default function OBD2Screen() {
   const handleConnect = (device) => transport === 'classic' ? connectClassic(device) : connectBLE(device);
 
   const statusColor = { [STATES.CONNECTED]: '#4caf50', [STATES.SCANNING]: '#ffeb3b', [STATES.CONNECTING]: '#ff9800', [STATES.INITIALIZING]: '#ff9800', [STATES.ERROR]: '#e51515', [STATES.IDLE]: '#555' };
+
+  // Change 3: keep processResponseRef in sync just before render
+  processResponseRef.current = processResponse;
 
   return (
     <ScrollView style={styles.container}>
@@ -479,7 +519,53 @@ export default function OBD2Screen() {
         </View>
       )}
 
-      {/* Live data grid */}}
+      {/* Change 2: Manual car entry card — shown when connected but no carInfo */}
+      {connected && !carInfo && (
+        <View style={styles.card}>
+          <Text style={styles.sectionTitle}>🚗 Vehicle Info</Text>
+          <TextInput
+            style={styles.manualInput}
+            placeholder="Year (e.g. 2018)"
+            placeholderTextColor="#555"
+            value={manualYear}
+            onChangeText={setManualYear}
+            keyboardType="numeric"
+          />
+          <TextInput
+            style={styles.manualInput}
+            placeholder="Make (e.g. BMW)"
+            placeholderTextColor="#555"
+            value={manualMake}
+            onChangeText={setManualMake}
+          />
+          <TextInput
+            style={styles.manualInput}
+            placeholder="Model (e.g. M3)"
+            placeholderTextColor="#555"
+            value={manualModel}
+            onChangeText={setManualModel}
+          />
+          <TextInput
+            style={styles.manualInput}
+            placeholder="Engine (e.g. S55 3.0L)"
+            placeholderTextColor="#555"
+            value={manualEngine}
+            onChangeText={setManualEngine}
+          />
+          <TouchableOpacity
+            style={styles.saveGarageBtn}
+            onPress={() => {
+              const car = { year: manualYear, make: manualMake, model: manualModel, engine: manualEngine, vin: null };
+              setConnectedCar(car);
+              setCarInfo(car);
+              addLog(`✅ Manual entry saved: ${manualYear} ${manualMake} ${manualModel}`);
+            }}>
+            <Text style={styles.saveGarageBtnText}>💾 Save to Garage</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
+      {/* Live data grid */}
       {connected && Object.keys(liveData).length > 0 && (
         <View style={styles.card}>
           <Text style={styles.sectionTitle}>Live Data</Text>
@@ -506,7 +592,7 @@ export default function OBD2Screen() {
         </View>
       )}
 
-      {/* Log */}
+      {/* Log — Change 4: show full log, no slice */}
       {log.length > 0 && (
         <View style={styles.card}>
           <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
@@ -517,7 +603,7 @@ export default function OBD2Screen() {
               <Text style={styles.copyBtnText}>📋 Copy</Text>
             </TouchableOpacity>
           </View>
-          {log.slice(0, 50).map((l, i) => <Text key={i} style={styles.logLine}>{l}</Text>)}
+          {log.map((l, i) => <Text key={i} style={styles.logLine}>{l}</Text>)}
         </View>
       )}
       <View style={{ height: 40 }} />
@@ -565,4 +651,7 @@ const styles = StyleSheet.create({
   logLine: { color: '#444', fontSize: 11, marginBottom: 2 },
   copyBtn: { borderWidth: 1, borderColor: '#444', borderRadius: 6, paddingHorizontal: 10, paddingVertical: 4 },
   copyBtnText: { color: '#888', fontSize: 11, fontWeight: '600' },
+  manualInput: { backgroundColor: '#111', borderWidth: 1, borderColor: '#333', borderRadius: 8, padding: 10, color: '#fff', fontSize: 14, marginBottom: 10 },
+  saveGarageBtn: { backgroundColor: '#e51515', borderRadius: 8, padding: 14, alignItems: 'center', marginTop: 4 },
+  saveGarageBtnText: { color: '#fff', fontWeight: '700', fontSize: 15 },
 });
