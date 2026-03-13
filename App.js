@@ -29,6 +29,7 @@ import E85FinderScreen from './src/screens/E85FinderScreen';
 import RaceRoomLobbyScreen from './src/screens/RaceRoomLobbyScreen';
 import RaceRoomWaitScreen from './src/screens/RaceRoomWaitScreen';
 import RaceCountdownScreen from './src/screens/RaceCountdownScreen';
+import LogAnalyzerScreen from './src/screens/LogAnalyzerScreen';
 
 const Tab = createBottomTabNavigator();
 const Stack = createNativeStackNavigator();
@@ -77,6 +78,7 @@ function ToolsStack() {
       <Stack.Screen name="RaceRoomLobby"    component={RaceRoomLobbyScreen}    options={{ headerShown: false }} />
       <Stack.Screen name="RaceRoomWait"     component={RaceRoomWaitScreen}     options={{ title: 'Race Room', headerBackVisible: false }} />
       <Stack.Screen name="RaceCountdown"    component={RaceCountdownScreen}    options={{ headerShown: false }} />
+      <Stack.Screen name="LogAnalyzer"      component={LogAnalyzerScreen}      options={{ title: 'BM3 Log Analyzer' }} />
     </Stack.Navigator>
   );
 }

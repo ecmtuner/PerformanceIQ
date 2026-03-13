@@ -51,6 +51,13 @@ const CATEGORIES = [
       { id: 'e85',     emoji: '📍', title: 'Find E85',         sub: 'Nearest stations',     screen: 'FindE85' },
     ],
   },
+  {
+    label: 'AI TOOLS',
+    accent: '#00ff88',
+    tools: [
+      { id: 'loganalyzer', emoji: '🔬', title: 'BM3 Log Analyzer', sub: 'AI health report', screen: 'LogAnalyzer' },
+    ],
+  },
 ];
 
 export default function HomeScreen({ navigation }) {
