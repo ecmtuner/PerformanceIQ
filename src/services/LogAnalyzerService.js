@@ -1,9 +1,11 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getFirestore, collection, addDoc, serverTimestamp } from 'firebase/firestore';
 import { initializeApp, getApps } from 'firebase/app';
+import Constants from 'expo-constants';
 
-// ─── Anthropic API Key (set in .env as ANTHROPIC_API_KEY) ────────────────────
-const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY || '';
+// ─── Anthropic API Key ────────────────────────────────────────────────────────
+// Key is injected via EAS secret substitution into app.json extra at build time
+const ANTHROPIC_API_KEY = Constants.expoConfig?.extra?.anthropicApiKey || '';
 
 // ─── Firebase (reuse existing config) ────────────────────────────────────────
 const firebaseConfig = {

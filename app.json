@@ -41,7 +41,8 @@
     "extra": {
       "eas": {
         "projectId": "3243e2fd-c1d4-46e5-bfb6-f8aeb9b3bec2"
-      }
+      },
+      "anthropicApiKey": "INJECTED_AT_BUILD"
     },
     "plugins": [
       "expo-location",
