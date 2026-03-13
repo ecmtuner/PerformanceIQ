@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Alert } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Alert, Clipboard } from 'react-native';
 import { bleManager, requestBLEPermissions } from '../services/BLEManager';
 import { PIDS, parseOBD2Response, AT_COMMANDS } from '../services/OBD2Service';
 import { atob, btoa } from 'react-native-quick-base64';
@@ -519,8 +519,15 @@ export default function OBD2Screen() {
       {/* Log */}
       {log.length > 0 && (
         <View style={styles.card}>
-          <Text style={styles.sectionTitle}>Log</Text>
-          {log.slice(0, 20).map((l, i) => <Text key={i} style={styles.logLine}>{l}</Text>)}
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+            <Text style={styles.sectionTitle}>Log</Text>
+            <TouchableOpacity
+              onPress={() => { Clipboard.setString(log.join('\n')); Alert.alert('Copied', 'Log copied to clipboard'); }}
+              style={styles.copyBtn}>
+              <Text style={styles.copyBtnText}>📋 Copy</Text>
+            </TouchableOpacity>
+          </View>
+          {log.slice(0, 50).map((l, i) => <Text key={i} style={styles.logLine}>{l}</Text>)}
         </View>
       )}
       <View style={{ height: 40 }} />
@@ -566,4 +573,6 @@ const styles = StyleSheet.create({
   dtcClearText: { color: '#e51515', fontWeight: '600' },
   noDtc: { color: '#4caf50', textAlign: 'center', marginTop: 8, fontSize: 13 },
   logLine: { color: '#444', fontSize: 11, marginBottom: 2 },
+  copyBtn: { borderWidth: 1, borderColor: '#444', borderRadius: 6, paddingHorizontal: 10, paddingVertical: 4 },
+  copyBtnText: { color: '#888', fontSize: 11, fontWeight: '600' },
 });
