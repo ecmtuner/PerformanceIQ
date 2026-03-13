@@ -73,8 +73,8 @@ export default function OBD2Screen() {
         if (!chunk) return;
         addLog(`RAW: ${chunk.replace(/[\r\n]/g, '↵').substring(0, 60)}`);
         bufferRef.current += chunk;
-        // Resolve pending response promise on '>' prompt
-        if (chunk.includes('>') && responseResolveRef.current) {
+        // Resolve pending response promise on '>' OR 'STOPPED' (multi-ECU end marker)
+        if ((chunk.includes('>') || chunk.toUpperCase().includes('STOPPED')) && responseResolveRef.current) {
           const res = responseResolveRef.current;
           responseResolveRef.current = null;
           res();
@@ -217,11 +217,12 @@ export default function OBD2Screen() {
             addLog(`RAW: ${chunk.replace(/[\r\n>]/g, '↵').substring(0, 60)}`);
           }
           bufferRef.current += chunk;
-          // Resolve pending command when '>' prompt received (may not have \r after it)
-          if (bufferRef.current.includes('>') && responseResolveRef.current) {
+          // Resolve pending command on '>' prompt OR 'STOPPED' (multi-ECU end marker)
+          const bufUpper = bufferRef.current.toUpperCase();
+          if ((bufferRef.current.includes('>') || bufUpper.includes('STOPPED')) && responseResolveRef.current) {
             const res = responseResolveRef.current;
             responseResolveRef.current = null;
-            bufferRef.current = bufferRef.current.replace(/>/g, '');
+            bufferRef.current = bufferRef.current.replace(/>/g, '').replace(/STOPPED/gi, '');
             res();
           }
           const lines = bufferRef.current.split(/[\r\n]+/);
@@ -367,8 +368,9 @@ export default function OBD2Screen() {
   };
 
   const processResponse = (line) => {
-    // '>' is the ELM327 prompt — signal that the response is complete
-    if (line.includes('>') && responseResolveRef.current) {
+    // '>' prompt OR 'STOPPED' = ELM327 done collecting responses — resolve pending command
+    const upper = line.toUpperCase().trim();
+    if ((line.includes('>') || upper === 'STOPPED') && responseResolveRef.current) {
       const res = responseResolveRef.current;
       responseResolveRef.current = null;
       res();
