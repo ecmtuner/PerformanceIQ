@@ -155,23 +155,44 @@ export default function OBD2Screen() {
         });
       }
 
-      // Known ELM327 BLE service/characteristic UUIDs (priority order)
-      // Veepeak BLE+, Vgate iCar Pro, OBDLink CX all use FFF0/FFF1/FFF2
-      // Note: 00002a05 (Service Changed) must be excluded — it's a BLE housekeeping char
-      const KNOWN_WRITE_UUIDS  = ['fff2','ffe2','0000fff2','0000ffe2'];
-      const KNOWN_NOTIFY_UUIDS = ['fff1','ffe1','6487','0000fff1','0000ffe1','00006487'];
+      // Extract the meaningful short UUID from any BLE UUID format
+      // Handles: "fff1", "0000fff1", "0000fff1-0000-1000-8000-00805f9b34fb"
+      const shortUUID = (uuid) => {
+        const clean = uuid.toLowerCase().replace(/-/g, '');
+        // Standard BLE 128-bit UUID: 0000XXXX0000100080000000805f9b34fb
+        if (clean.length === 32 && clean.endsWith('00001000800000805f9b34fb')) {
+          return clean.substring(4, 8); // e.g. "fff1"
+        }
+        if (clean.length === 8) return clean.substring(4); // "0000fff1" → "fff1"
+        if (clean.length === 4) return clean;               // "fff1" → "fff1"
+        return clean.substring(0, 8); // fallback
+      };
 
-      // Generic BLE chars to NEVER use as data channel
-      const BLACKLIST_UUIDS = ['2a05','2a00','2a01','2a04','2a23','2a24','2b2a','00002a05','00002a00'];
+      // Generic BLE service chars — never OBD2 data
+      const BLACKLIST = new Set(['2a00','2a01','2a02','2a03','2a04','2a05','2a23','2a24','2a25','2b2a','2b29']);
 
-      const normalize = (uuid) => uuid.toLowerCase().replace(/-/g,'').replace(/^0+/,'').substring(0,8);
+      // Known OBD2 adapter write UUIDs (Veepeak/Vgate/OBDLink)
+      const WRITE_PRIORITY  = ['fff2','ffe2','beef','6387'];
+      // Known OBD2 adapter notify UUIDs
+      const NOTIFY_PRIORITY = ['fff1','ffe1','6487'];
 
-      let writeChar  = allChars.find(c => KNOWN_WRITE_UUIDS.includes(normalize(c.uuid)) && (c.isWritableWithResponse || c.isWritableWithoutResponse));
-      let notifyChar = allChars.find(c => KNOWN_NOTIFY_UUIDS.includes(normalize(c.uuid)) && (c.isNotifiable || c.isIndicatable));
+      const isBlacklisted = (c) => BLACKLIST.has(shortUUID(c.uuid));
+      const canWrite  = (c) => (c.isWritableWithResponse || c.isWritableWithoutResponse) && !isBlacklisted(c);
+      const canNotify = (c) => (c.isNotifiable || c.isIndicatable) && !isBlacklisted(c);
 
-      // Fallback: first writable/notifiable that isn't a blacklisted BLE generic char
-      if (!writeChar)  writeChar  = allChars.find(c => !BLACKLIST_UUIDS.includes(normalize(c.uuid)) && (c.isWritableWithResponse || c.isWritableWithoutResponse));
-      if (!notifyChar) notifyChar = allChars.find(c => !BLACKLIST_UUIDS.includes(normalize(c.uuid)) && (c.isNotifiable || c.isIndicatable));
+      // Priority match first, then fallback to any non-blacklisted char
+      let writeChar  = allChars.find(c => WRITE_PRIORITY.includes(shortUUID(c.uuid))  && canWrite(c))
+                    ?? allChars.find(c => canWrite(c));
+      let notifyChar = allChars.find(c => NOTIFY_PRIORITY.includes(shortUUID(c.uuid)) && canNotify(c))
+                    ?? allChars.find(c => canNotify(c));
+
+      // Special case: Veepeak uses a single char (6487) for both write AND notify
+      // If we found a char that does both and nothing better — use it for both
+      const dualChar = allChars.find(c => canWrite(c) && canNotify(c) && !BLACKLIST.has(shortUUID(c.uuid)));
+      if (dualChar && (!writeChar || !notifyChar)) {
+        writeChar  = writeChar  ?? dualChar;
+        notifyChar = notifyChar ?? dualChar;
+      }
 
       addLog(`Write char: ${writeChar?.uuid?.substring(0,8) || 'NONE'}`);
       addLog(`Notify char: ${notifyChar?.uuid?.substring(0,8) || 'NONE'}`);
@@ -228,10 +249,24 @@ export default function OBD2Screen() {
 
   const writeBLE = async (cmd) => {
     try {
-      if (bleCharRef.current?.isWritableWithoutResponse) {
-        await bleCharRef.current.writeWithoutResponse(btoa(cmd));
+      const c = bleCharRef.current;
+      if (!c) { addLog('Write error: no char'); return; }
+      const encoded = btoa(cmd);
+      // Use device-level write with serviceUUID + charUUID — avoids "Characteristic N not found" stale ref errors
+      const dev = bleDeviceRef.current;
+      if (dev && c.serviceUUID) {
+        if (c.isWritableWithoutResponse) {
+          await dev.writeCharacteristicWithoutResponseForService(c.serviceUUID, c.uuid, encoded);
+        } else {
+          await dev.writeCharacteristicWithResponseForService(c.serviceUUID, c.uuid, encoded);
+        }
       } else {
-        await bleCharRef.current?.writeWithResponse(btoa(cmd));
+        // Fallback to char ref
+        if (c.isWritableWithoutResponse) {
+          await c.writeWithoutResponse(encoded);
+        } else {
+          await c.writeWithResponse(encoded);
+        }
       }
     } catch (e) { addLog(`Write error: ${e.message}`); }
   };
