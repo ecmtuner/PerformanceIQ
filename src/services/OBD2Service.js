@@ -6,9 +6,10 @@ export const AT_COMMANDS = {
   ECHO_OFF:        'ATE0\r',   // suppress command echo
   LINEFEED_OFF:    'ATL0\r',   // no extra linefeeds
   SPACES_OFF:      'ATS0\r',   // remove spaces from response bytes (cleaner parsing)
-  HEADERS_OFF:     'ATH0\r',   // headers off for live PID polling (toggled ON for VIN)
-  ADAPTIVE_TIMING: 'ATAT2\r',  // ATAT2 = aggressive adaptive timing (faster than ATAT1)
-  AUTO_PROTOCOL:   'ATSP0\r',  // auto-detect protocol last (after other settings)
+  HEADERS_OFF:     'ATH0\r',   // strip CAN/ISO-TP headers — we just want data bytes
+  CAF_ON:          'ATCAF1\r', // CAN auto format ON — ELM formats multi-frame responses
+  ADAPTIVE_TIMING: 'ATAT2\r',  // aggressive adaptive timing (faster responses)
+  AUTO_PROTOCOL:   'ATSP0\r',  // auto-detect OBD protocol (run last)
 };
 
 // OBD2 PIDs
@@ -29,9 +30,16 @@ export const PIDS = {
 
 export const parseOBD2Response = (raw, pid) => {
   try {
-    // Remove spaces, mode+PID prefix, extract data bytes
-    const clean = raw.replace(/\s/g, '').toUpperCase();
-    // Typical response: 41 0C 1A F8 → mode 41, PID 0C, data bytes
+    // Strip spaces and uppercase
+    let clean = raw.replace(/\s/g, '').toUpperCase();
+
+    // Strip CAN frame headers if present — e.g. "7EA0", "7E80", "7E90"
+    // These appear when ATH0 hasn't taken effect yet or adapter sends them anyway
+    clean = clean.replace(/^7E[0-9A-F]{2}/i, '');
+
+    // Strip ISO-TP length byte if present (single hex digit or byte before mode response)
+    // e.g. "03410C1AF8" → length=03, then "410C1AF8"
+    // Find the mode response marker directly
     const modeResp = '4' + pid.cmd[1]; // e.g. "41"
     const pidHex = pid.cmd.substring(2, 4).toUpperCase();
     const idx = clean.indexOf(modeResp + pidHex);

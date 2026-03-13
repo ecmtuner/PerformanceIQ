@@ -277,31 +277,26 @@ export default function OBD2Screen() {
 
   const readVIN = async () => {
     addLog('Reading VIN...');
-    vinLinesRef.current = [];
 
-    // Step 1: Switch to headers ON so we can sequence multi-frame ISO-TP response
-    await sendCommand('ATH1\r');
-    await delay(300);
-
-    // Step 2: Try up to 3 times — some adapters need a retry
+    // Try up to 3 times
     for (let attempt = 1; attempt <= 3; attempt++) {
       vinLinesRef.current = [];
       vinCaptureRef.current = true;
       addLog(`VIN attempt ${attempt}/3...`);
 
-      // Send 0902 (no space — most reliable across ELM327 chips)
+      // 0902 — Mode 09 PID 02 (VIN), no space for max compatibility
       await sendCommand('0902\r');
 
-      // Wait for multi-frame response to complete (up to 3s)
-      await delay(3000);
+      // Wait up to 4s for multi-frame response
+      await delay(4000);
       vinCaptureRef.current = false;
+
+      addLog(`VIN lines captured: ${vinLinesRef.current.length}`);
+      vinLinesRef.current.forEach((l, i) => addLog(`  VIN[${i}]: ${l.substring(0,50)}`));
 
       const vin = parseVINFromOBD2(vinLinesRef.current);
       if (vin) {
         addLog(`VIN: ${vin} — decoding...`);
-        // Step 3: Restore headers off for live data polling
-        await sendCommand('ATH0\r');
-        await delay(200);
         const car = await decodeVIN(vin);
         if (car) {
           setConnectedCar(car);
@@ -312,13 +307,8 @@ export default function OBD2Screen() {
         }
         return;
       }
-      addLog(`Attempt ${attempt} — no VIN data yet (lines: ${vinLinesRef.current.length})`);
       await delay(500);
     }
-
-    // Step 3: Restore headers off regardless of outcome
-    await sendCommand('ATH0\r');
-    await delay(200);
     addLog('VIN not available from this adapter');
   };
 

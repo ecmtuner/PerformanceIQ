@@ -43,9 +43,12 @@ export const parseVINFromOBD2 = (rawLines) => {
     for (const line of rawLines) {
       const clean = line.replace(/\s/g, '').toUpperCase();
 
+      // Strip CAN headers if present (7EA0, 7E80 etc) — in case ATH0 didn't take effect
+      const stripped = clean.replace(/^7E[0-9A-F]{2}/i, '').replace(/^0[0-9A-F]{1}/,'');
+
       // Find 4902XX marker and grab everything after it
       // XX is the frame index byte (01, 02, 03...) — skip it, it's not VIN data
-      const match = clean.match(/4902([0-9A-F]{2})([0-9A-F]+)/);
+      const match = stripped.match(/4902([0-9A-F]{2})([0-9A-F]+)/);
       if (match) {
         // match[1] = frame index (skip), match[2] = actual VIN hex bytes
         const hexData = match[2];
