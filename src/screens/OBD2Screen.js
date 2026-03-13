@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Alert, Clipboard, TextInput } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Alert, Clipboard } from 'react-native';
 import { bleManager, requestBLEPermissions } from '../services/BLEManager';
 import { PIDS, parseOBD2Response, AT_COMMANDS } from '../services/OBD2Service';
 import { atob, btoa } from 'react-native-quick-base64';
@@ -18,12 +18,6 @@ export default function OBD2Screen() {
   const [log, setLog] = useState([]);
   const [dtcs, setDtcs] = useState([]);
   const [carInfo, setCarInfo] = useState(null);
-
-  // Manual car entry state
-  const [manualYear, setManualYear] = useState('');
-  const [manualMake, setManualMake] = useState('');
-  const [manualModel, setManualModel] = useState('');
-  const [manualEngine, setManualEngine] = useState('');
 
   // Refs that work for both transports
   const classicDeviceRef = useRef(null);  // BluetoothClassic device
@@ -509,59 +503,28 @@ export default function OBD2Screen() {
         </View>
       )}
 
-      {/* Car identity card */}
+      {/* Car identity card — shown after VIN is decoded via OBD2 */}
       {carInfo && (
         <View style={[styles.card, { borderLeftWidth: 3, borderLeftColor: '#4caf50' }]}>
-          <Text style={[styles.sectionTitle, { color: '#4caf50' }]}>✅ Vehicle Verified</Text>
-          <Text style={{ color: '#fff', fontSize: 16, fontWeight: '800' }}>{carInfo.year} {carInfo.make} {carInfo.model}</Text>
-          <Text style={{ color: '#666', fontSize: 12, marginTop: 2 }}>{carInfo.engine}  ·  {carInfo.fuel}</Text>
-          <Text style={{ color: '#333', fontSize: 10, marginTop: 4 }}>VIN: {carInfo.vin}</Text>
+          <Text style={[styles.sectionTitle, { color: '#4caf50' }]}>✅ Vehicle Verified (OBD2)</Text>
+          <Text style={{ color: '#fff', fontSize: 16, fontWeight: '800', marginBottom: 2 }}>{carInfo.year} {carInfo.make} {carInfo.model}</Text>
+          <Text style={{ color: '#666', fontSize: 12 }}>{carInfo.engine}  ·  {carInfo.fuel}</Text>
+          <Text style={{ color: '#333', fontSize: 10, marginTop: 4, marginBottom: 12 }}>VIN: {carInfo.vin}</Text>
+          <TouchableOpacity
+            style={styles.garageBtn}
+            onPress={() => {
+              Alert.alert('✅ Pushed to Garage', `${carInfo.year} ${carInfo.make} ${carInfo.model} is now your active vehicle for GPS timing and leaderboard submissions.`);
+              addLog(`🏎️ Pushed to garage: ${carInfo.year} ${carInfo.make} ${carInfo.model}`);
+            }}>
+            <Text style={styles.garageBtnText}>🏎️ Push to Garage</Text>
+          </TouchableOpacity>
         </View>
       )}
 
-      {/* Change 2: Manual car entry card — shown when connected but no carInfo */}
-      {connected && !carInfo && (
-        <View style={styles.card}>
-          <Text style={styles.sectionTitle}>🚗 Vehicle Info</Text>
-          <TextInput
-            style={styles.manualInput}
-            placeholder="Year (e.g. 2018)"
-            placeholderTextColor="#555"
-            value={manualYear}
-            onChangeText={setManualYear}
-            keyboardType="numeric"
-          />
-          <TextInput
-            style={styles.manualInput}
-            placeholder="Make (e.g. BMW)"
-            placeholderTextColor="#555"
-            value={manualMake}
-            onChangeText={setManualMake}
-          />
-          <TextInput
-            style={styles.manualInput}
-            placeholder="Model (e.g. M3)"
-            placeholderTextColor="#555"
-            value={manualModel}
-            onChangeText={setManualModel}
-          />
-          <TextInput
-            style={styles.manualInput}
-            placeholder="Engine (e.g. S55 3.0L)"
-            placeholderTextColor="#555"
-            value={manualEngine}
-            onChangeText={setManualEngine}
-          />
-          <TouchableOpacity
-            style={styles.saveGarageBtn}
-            onPress={() => {
-              const car = { year: manualYear, make: manualMake, model: manualModel, engine: manualEngine, vin: null };
-              setConnectedCar(car);
-              setCarInfo(car);
-              addLog(`✅ Manual entry saved: ${manualYear} ${manualMake} ${manualModel}`);
-            }}>
-            <Text style={styles.saveGarageBtnText}>💾 Save to Garage</Text>
-          </TouchableOpacity>
+      {/* VIN not available notice */}
+      {connected && !carInfo && state === STATES.CONNECTED && (
+        <View style={[styles.hintBox, { borderLeftColor: '#555' }]}>
+          <Text style={[styles.hintText, { color: '#555' }]}>🔍 VIN not available — your car may use a proprietary protocol. Connect with engine running and try reconnecting.</Text>
         </View>
       )}
 
@@ -651,7 +614,7 @@ const styles = StyleSheet.create({
   logLine: { color: '#444', fontSize: 11, marginBottom: 2 },
   copyBtn: { borderWidth: 1, borderColor: '#444', borderRadius: 6, paddingHorizontal: 10, paddingVertical: 4 },
   copyBtnText: { color: '#888', fontSize: 11, fontWeight: '600' },
-  manualInput: { backgroundColor: '#111', borderWidth: 1, borderColor: '#333', borderRadius: 8, padding: 10, color: '#fff', fontSize: 14, marginBottom: 10 },
-  saveGarageBtn: { backgroundColor: '#e51515', borderRadius: 8, padding: 14, alignItems: 'center', marginTop: 4 },
-  saveGarageBtnText: { color: '#fff', fontWeight: '700', fontSize: 15 },
+
+  garageBtn: { backgroundColor: '#1a1a1a', borderWidth: 1, borderColor: '#4caf50', borderRadius: 8, padding: 12, alignItems: 'center' },
+  garageBtnText: { color: '#4caf50', fontWeight: '700', fontSize: 14 },
 });
