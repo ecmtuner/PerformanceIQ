@@ -80,20 +80,25 @@ export function parseCSV(csvText) {
   let powerRows = allRows;
 
   if (tpsIdx !== undefined && rpmIdx !== undefined) {
-    // Trim everything after final lift-off
-    let lastFullThrottleIdx = -1;
+    // Auto-detect throttle scale: 0-1 (normalized) vs 0-100 (percent)
+    const tpsSample = allRows.map(r => parseFloat(r[tpsIdx])).filter(v => !isNaN(v));
+    const maxTps = Math.max(...tpsSample);
+    const tpsThreshold = maxTps <= 1.1 ? 0.95 : MIN_TPS_PCT;
+
+    // Find last WOT row, trim post-lift-off coasting data
+    let lastWOTIdx = -1;
     for (let i = allRows.length - 1; i >= 0; i--) {
       const tps = parseFloat(allRows[i][tpsIdx]);
-      if (!isNaN(tps) && tps >= MIN_TPS_PCT) { lastFullThrottleIdx = i; break; }
+      if (!isNaN(tps) && tps >= tpsThreshold) { lastWOTIdx = i; break; }
     }
-    const trimmedRows = lastFullThrottleIdx >= 0
-      ? allRows.slice(0, lastFullThrottleIdx + 1)
+    const trimmedRows = lastWOTIdx >= 0
+      ? allRows.slice(0, lastWOTIdx + 1)
       : allRows;
 
     powerRows = trimmedRows.filter(row => {
       const tps = parseFloat(row[tpsIdx]);
       const rpm = parseFloat(row[rpmIdx]);
-      return !isNaN(tps) && !isNaN(rpm) && tps >= MIN_TPS_PCT && rpm >= MIN_RPM;
+      return !isNaN(tps) && !isNaN(rpm) && tps >= tpsThreshold && rpm >= MIN_RPM;
     });
   }
 
