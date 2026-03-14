@@ -25,6 +25,12 @@ const getDB = () => {
 // ─── AsyncStorage key ─────────────────────────────────────────────────────────
 const HISTORY_KEY = 'log_analyzer_history';
 
+// ─── Channels by analysis scope ──────────────────────────────────────────────
+const LOAD_CHANNELS = new Set(['timing', 'knock', 'afr', 'boost']);
+const ALL_CHANNELS  = new Set(['coolant', 'iat', 'battery']);
+const MIN_TPS_PCT   = 95;
+const MIN_RPM       = 3500;
+
 // ─── Column aliases (case-insensitive matching) ───────────────────────────────
 const CHANNEL_ALIASES = {
   coolant: ['coolant temp', 'clt', 'engine coolant temperature', 'coolant'],
@@ -63,41 +69,79 @@ export function parseCSV(csvText) {
   });
 
   // Parse data rows
-  const rows = dataLines
+  const allRows = dataLines
     .map(line => line.split(',').map(v => v.trim().replace(/^"|"$/g, '')))
     .filter(cols => cols.length >= rawHeaders.length / 2);
 
-  // Compute stats per channel
+  // ── Build full-throttle subset ──────────────────────────────────────────────
+  const tpsIdx = colMap['throttle'];
+  const rpmIdx = colMap['rpm'];
+
+  let powerRows = allRows;
+
+  if (tpsIdx !== undefined && rpmIdx !== undefined) {
+    // Trim everything after final lift-off
+    let lastFullThrottleIdx = -1;
+    for (let i = allRows.length - 1; i >= 0; i--) {
+      const tps = parseFloat(allRows[i][tpsIdx]);
+      if (!isNaN(tps) && tps >= MIN_TPS_PCT) { lastFullThrottleIdx = i; break; }
+    }
+    const trimmedRows = lastFullThrottleIdx >= 0
+      ? allRows.slice(0, lastFullThrottleIdx + 1)
+      : allRows;
+
+    powerRows = trimmedRows.filter(row => {
+      const tps = parseFloat(row[tpsIdx]);
+      const rpm = parseFloat(row[rpmIdx]);
+      return !isNaN(tps) && !isNaN(rpm) && tps >= MIN_TPS_PCT && rpm >= MIN_RPM;
+    });
+  }
+
+  // ── Compute stats — load channels from powerRows, thermal from allRows ──────
   const stats = {};
   for (const [channel, colIdx] of Object.entries(colMap)) {
-    const vals = rows
-      .map(r => parseFloat(r[colIdx]))
-      .filter(v => !isNaN(v));
+    const useRows = LOAD_CHANNELS.has(channel) ? powerRows : allRows;
+    const vals = useRows.map(r => parseFloat(r[colIdx])).filter(v => !isNaN(v));
     if (vals.length === 0) continue;
     stats[channel] = {
       min: Math.min(...vals),
       max: Math.max(...vals),
       avg: vals.reduce((a, b) => a + b, 0) / vals.length,
       count: vals.length,
+      fullThrottleOnly: LOAD_CHANNELS.has(channel),
     };
   }
 
-  // Sample up to 500 evenly spaced rows for AI
-  const sampleSize = Math.min(500, rows.length);
-  const step = Math.max(1, Math.floor(rows.length / sampleSize));
-  const sampledRows = rows.filter((_, i) => i % step === 0).slice(0, sampleSize);
+  // Sample from power rows for AI (most relevant data)
+  const sampleSource = powerRows.length >= 10 ? powerRows : allRows;
+  const sampleSize = Math.min(500, sampleSource.length);
+  const step = Math.max(1, Math.floor(sampleSource.length / sampleSize));
+  const sampledRows = sampleSource.filter((_, i) => i % step === 0).slice(0, sampleSize);
 
-  return { headers: rawHeaders, colMap, stats, sampledRows, totalRows: rows.length };
+  return {
+    headers: rawHeaders,
+    colMap,
+    stats,
+    sampledRows,
+    totalRows: allRows.length,
+    powerRunRows: powerRows.length,
+    hasThrottleFilter: tpsIdx !== undefined && rpmIdx !== undefined,
+  };
 }
 
 // ─── Build AI prompt ──────────────────────────────────────────────────────────
 function buildPrompt(parsed, filename) {
-  const { stats, sampledRows, headers, colMap, totalRows } = parsed;
+  const { stats, sampledRows, headers, colMap, totalRows, powerRunRows, hasThrottleFilter } = parsed;
 
   const statsText = Object.entries(stats)
-    .map(([ch, s]) =>
-      `${ch.toUpperCase()}: min=${s.min.toFixed(2)}, max=${s.max.toFixed(2)}, avg=${s.avg.toFixed(2)} (${s.count} samples)`
-    ).join('\n');
+    .map(([ch, s]) => {
+      const tag = s.fullThrottleOnly ? ' [FULL THROTTLE ONLY]' : ' [ALL DATA]';
+      return `${ch.toUpperCase()}${tag}: min=${s.min.toFixed(2)}, max=${s.max.toFixed(2)}, avg=${s.avg.toFixed(2)} (${s.count} samples)`;
+    }).join('\n');
+
+  const filterNote = hasThrottleFilter
+    ? `Data filtering: Load-critical channels (knock, timing, AFR, boost) use only full-throttle power run data (TPS ≥ 95%, RPM ≥ 3500, lift-off trimmed). ${powerRunRows} power run rows out of ${totalRows} total.`
+    : `Note: Throttle/RPM columns not detected — all ${totalRows} rows used for analysis.`;
 
   // Build a small CSV sample for context
   const sampleHeaders = Object.entries(colMap)
@@ -111,6 +155,7 @@ function buildPrompt(parsed, filename) {
 
 FILE: ${filename}
 TOTAL ROWS: ${totalRows}
+${filterNote}
 
 CHANNEL STATISTICS:
 ${statsText || 'No recognized channels found.'}
